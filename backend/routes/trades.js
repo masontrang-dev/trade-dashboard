@@ -50,9 +50,9 @@ router.post("/", async (req, res) => {
       });
     }
 
-    if (!["BUY", "SELL"].includes(type)) {
+    if (!["LONG", "SHORT"].includes(type)) {
       return res.status(400).json({
-        error: "Type must be either BUY or SELL",
+        error: "Type must be either LONG or SHORT",
       });
     }
 

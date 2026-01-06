@@ -31,7 +31,7 @@ db.serialize(() => {
     CREATE TABLE IF NOT EXISTS trades (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       symbol TEXT NOT NULL,
-      type TEXT NOT NULL CHECK(type IN ('BUY', 'SELL')),
+      type TEXT NOT NULL CHECK(type IN ('LONG', 'SHORT')),
       quantity REAL NOT NULL,
       entry_price REAL NOT NULL,
       exit_price REAL,
@@ -39,6 +39,8 @@ db.serialize(() => {
       take_profit REAL,
       status TEXT NOT NULL DEFAULT 'OPEN' CHECK(status IN ('OPEN', 'CLOSED', 'CANCELLED')),
       profit_loss REAL,
+      risk_amount REAL,
+      r_size REAL,
       entry_time DATETIME DEFAULT CURRENT_TIMESTAMP,
       exit_time DATETIME,
       notes TEXT,

@@ -112,6 +112,37 @@ const showRValues = ref(false);
 const defaultRSize = ref(2500);
 
 // Load risk settings from API on mount
+const loadActiveTrades = async () => {
+  try {
+    const trades = await api.getOpenTrades();
+    activeTrades.value = trades.map((trade) => {
+      // Calculate risk amount if not provided
+      const riskAmount =
+        trade.risk_amount ||
+        (trade.entry_price && trade.stop_loss && trade.quantity
+          ? Math.abs(trade.entry_price - trade.stop_loss) * trade.quantity
+          : 0);
+
+      return {
+        id: trade.id,
+        ticker: trade.symbol,
+        type: trade.type,
+        shares: trade.quantity,
+        entryPrice: trade.entry_price,
+        stopLoss: trade.stop_loss,
+        target1: trade.take_profit,
+        notes: trade.notes,
+        riskAmount: riskAmount,
+        rSize: trade.r_size || defaultRSize.value,
+        entry_time: trade.entry_time,
+        status: trade.status || "OPEN",
+      };
+    });
+  } catch (error) {
+    console.error("Failed to load active trades:", error);
+  }
+};
+
 const loadRiskSettings = async () => {
   try {
     const settings = await api.getRiskSettings();
@@ -147,6 +178,12 @@ const loadRiskSettings = async () => {
     showRValues.value = JSON.parse(savedToggle);
   }
 };
+
+// Load data when component mounts
+onMounted(async () => {
+  await loadRiskSettings();
+  await loadActiveTrades();
+});
 
 // Load settings when component is mounted
 onMounted(() => {
@@ -191,13 +228,51 @@ const openRiskPercentage = computed(() => {
   return (totalOpenRisk.value / maxOpenRisk.value) * 100;
 });
 
-const handleTradeAdded = (trade) => {
-  activeTrades.value.push({
-    ...trade,
-    id: Date.now(),
-    date: new Date().toISOString(),
-    status: "active",
-  });
+const handleTradeAdded = async (trade) => {
+  try {
+    // Calculate risk amount
+    const riskAmount =
+      Math.abs(trade.entryPrice - trade.stopLoss) *
+      (trade.calculatedShares || trade.shares);
+
+    // Prepare the trade data for the API
+    const tradeData = {
+      symbol: trade.ticker,
+      type: trade.type.toUpperCase(),
+      quantity: trade.calculatedShares || trade.shares,
+      entry_price: parseFloat(trade.entryPrice),
+      stop_loss: parseFloat(trade.stopLoss),
+      take_profit: trade.target1 ? parseFloat(trade.target1) : null,
+      notes: trade.notes,
+      risk_amount: riskAmount,
+      r_size: defaultRSize.value,
+    };
+
+    // Make the API call
+    const savedTrade = await api.createTrade(tradeData);
+
+    // Add the saved trade to the local state with proper formatting
+    const newTrade = {
+      id: savedTrade.id,
+      ticker: trade.ticker,
+      type: trade.type.toUpperCase(),
+      shares: trade.calculatedShares || trade.shares,
+      entryPrice: parseFloat(trade.entryPrice),
+      stopLoss: parseFloat(trade.stopLoss),
+      target1: trade.target1 ? parseFloat(trade.target1) : null,
+      notes: trade.notes,
+      riskAmount: riskAmount,
+      rSize: defaultRSize.value,
+      entry_time: new Date().toISOString(),
+      status: "OPEN",
+    };
+
+    // Add to the beginning of the array
+    activeTrades.value = [newTrade, ...activeTrades.value];
+  } catch (error) {
+    console.error("Error saving trade:", error);
+    alert("Failed to save trade. Please try again.");
+  }
 };
 
 const handleTradeClosed = (tradeId, profitLoss) => {

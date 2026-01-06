@@ -27,26 +27,44 @@ class Trade {
 
   static async create(tradeData) {
     return new Promise((resolve, reject) => {
+      // Set default values and validate
+      const tradeType = (tradeData.type || "LONG").toUpperCase();
+      if (tradeType !== "LONG" && tradeType !== "SHORT") {
+        reject(new Error("Type must be either LONG or SHORT"));
+        return;
+      }
+
       const {
         symbol,
-        type,
         quantity,
         entry_price,
         stop_loss,
         take_profit,
         notes,
+        risk_amount,
+        r_size,
       } = tradeData;
 
       const sql = `
         INSERT INTO trades (
           symbol, type, quantity, entry_price, stop_loss, 
-          take_profit, notes
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+          take_profit, notes, risk_amount, r_size, status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN')
       `;
 
       db.run(
         sql,
-        [symbol, type, quantity, entry_price, stop_loss, take_profit, notes],
+        [
+          symbol,
+          tradeType,
+          quantity,
+          entry_price,
+          stop_loss,
+          take_profit,
+          notes || null,
+          risk_amount || null,
+          r_size || null,
+        ],
         function (err) {
           if (err) {
             reject(err);

@@ -20,7 +20,7 @@
           <div class="ticker-info">
             <h3>{{ trade.ticker }}</h3>
             <span class="trade-type" :class="trade.type">{{
-              trade.type.toUpperCase()
+              trade.type ? trade.type.toUpperCase() : ""
             }}</span>
           </div>
           <div class="trade-actions">
@@ -33,11 +33,19 @@
           <div class="detail-row">
             <div class="detail-item">
               <span class="label">Entry:</span>
-              <span class="value">${{ trade.entryPrice.toFixed(2) }}</span>
+              <span class="value"
+                >${{
+                  trade.entryPrice ? trade.entryPrice.toFixed(2) : "0.00"
+                }}</span
+              >
             </div>
             <div class="detail-item">
               <span class="label">Stop:</span>
-              <span class="value">${{ trade.stopLoss.toFixed(2) }}</span>
+              <span class="value"
+                >${{
+                  trade.stopLoss ? trade.stopLoss.toFixed(2) : "0.00"
+                }}</span
+              >
             </div>
             <div class="detail-item">
               <span class="label">Shares:</span>
@@ -50,10 +58,18 @@
               <span class="label">Risk:</span>
               <span class="value">
                 <template v-if="showRValues">
-                  {{ riskAmountR(trade).toFixed(2) }}R
-                  <small>(${{ trade.riskAmount.toFixed(2) }})</small>
+                  {{ (trade.riskAmount ? riskAmountR(trade) : 0).toFixed(2) }}R
+                  <small
+                    >({{
+                      trade.riskAmount
+                        ? `$${trade.riskAmount.toFixed(2)}`
+                        : "$0.00"
+                    }})</small
+                  >
                 </template>
-                <template v-else> ${{ trade.riskAmount.toFixed(2) }} </template>
+                <template v-else>
+                  ${{ trade.riskAmount ? trade.riskAmount.toFixed(2) : "0.00" }}
+                </template>
               </span>
             </div>
             <div class="detail-item">
@@ -234,6 +250,7 @@ const currentRMultiple = (trade) => {
 };
 
 const riskAmountR = (trade) => {
+  if (!trade.riskAmount || props.defaultRSize <= 0) return 0;
   return trade.riskAmount / props.defaultRSize;
 };
 
