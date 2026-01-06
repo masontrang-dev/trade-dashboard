@@ -117,4 +117,6 @@ jspm_packages/
 # Vite specific (any directory)
 **/.vite/
 
-/backend/database/trades.db
+# Database files
+backend/database/*.db
+backend/database/*.db-journal

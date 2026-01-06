@@ -2,6 +2,21 @@
   <div class="trade-form">
     <h2>New Trade Setup</h2>
     <form @submit.prevent="submitTrade">
+      <div class="form-row">
+        <div class="form-group">
+          <label for="rSize">R Size ($)</label>
+          <input
+            id="rSize"
+            v-model.number="trade.rSize"
+            type="number"
+            step="1"
+            min="1"
+            placeholder="Enter R size"
+            required
+          />
+        </div>
+      </div>
+
       <div class="form-group">
         <label for="ticker">Ticker Symbol</label>
         <input
@@ -209,10 +224,11 @@ const trade = ref({
   type: "long",
   notes: "",
   taxRate: 25,
+  rSize: props.defaultRSize,
 });
 
 const rValueDollars = computed(() => {
-  return props.defaultRSize; // Always 1R in dollars
+  return trade.value.rSize || props.defaultRSize; // Use trade's rSize with fallback to default
 });
 
 const riskPerShare = computed(() => {
@@ -222,7 +238,7 @@ const riskPerShare = computed(() => {
 
 const calculatedShares = computed(() => {
   if (riskPerShare.value === 0) return 0;
-  const rDollars = props.defaultRSize; // Always use 1R
+  const rDollars = trade.value.rSize || props.defaultRSize;
   return Math.floor(rDollars / riskPerShare.value);
 });
 
@@ -230,7 +246,7 @@ const sharesCalculationInfo = computed(() => {
   if (riskPerShare.value === 0) {
     return "Enter entry and stop prices";
   }
-  const rDollars = props.defaultRSize; // Always use 1R
+  const rDollars = trade.value.rSize || props.defaultRSize;
   return `${rDollars.toFixed(2)} ÷ ${riskPerShare.value.toFixed(2)} = ${
     calculatedShares.value
   } shares`;
@@ -241,7 +257,8 @@ const totalRisk = computed(() => {
 });
 
 const totalRiskR = computed(() => {
-  return totalRisk.value / props.defaultRSize;
+  const rSize = trade.value.rSize || props.defaultRSize;
+  return totalRisk.value / rSize;
 });
 
 const positionValue = computed(() => {
@@ -294,7 +311,7 @@ const postTaxGain2R = computed(() => {
     preTax: totalProfit,
     tax: totalProfit * taxRate,
     afterTax: afterTax,
-    afterTaxR: afterTax / props.defaultRSize,
+    afterTaxR: afterTax / (trade.value.rSize || props.defaultRSize),
   };
 });
 
@@ -317,6 +334,28 @@ watch([calculatedShares], () => {
     trade.value.shares = calculatedShares.value;
   }
 });
+
+// Watch for changes in defaultRSize prop and update rSize if it hasn't been modified by user
+const userModifiedRSize = ref(false);
+
+watch(
+  () => props.defaultRSize,
+  (newVal) => {
+    if (!userModifiedRSize.value) {
+      trade.value.rSize = newVal;
+    }
+  }
+);
+
+// Track if user modifies the rSize
+watch(
+  () => trade.value.rSize,
+  (newVal, oldVal) => {
+    if (oldVal !== undefined && newVal !== oldVal) {
+      userModifiedRSize.value = true;
+    }
+  }
+);
 
 const validateTrade = () => {
   if (trade.value.type === "long") {
