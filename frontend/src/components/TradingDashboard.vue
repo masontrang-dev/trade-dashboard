@@ -111,11 +111,27 @@ const tradeHistory = ref([]);
 const showRValues = ref(false);
 const defaultRSize = ref(2500);
 
-// Load risk settings from API on mount
+// Load active trades from API
 const loadActiveTrades = async () => {
   try {
+    console.log("Fetching active trades from API...");
     const trades = await api.getOpenTrades();
+    console.log("Received trades from API:", trades);
+
+    if (!Array.isArray(trades)) {
+      console.error("Invalid trades data received:", trades);
+      throw new Error("Invalid trades data received from server");
+    }
+
     activeTrades.value = trades.map((trade) => {
+      // Log each trade being processed
+      console.log("Processing trade:", {
+        id: trade.id,
+        symbol: trade.symbol,
+        hasPrice: trade.current_price !== undefined,
+        hasPnl: trade.pnl !== undefined,
+      });
+
       // Calculate risk amount if not provided
       const riskAmount =
         trade.risk_amount ||
@@ -123,23 +139,44 @@ const loadActiveTrades = async () => {
           ? Math.abs(trade.entry_price - trade.stop_loss) * trade.quantity
           : 0);
 
+      // Calculate P&L percentage if not provided
+      const pnl = trade.pnl || 0;
+      const pnlPercent =
+        trade.pnl_percent !== undefined && trade.pnl_percent !== null
+          ? trade.pnl_percent
+          : trade.entry_price && trade.quantity && pnl !== 0
+          ? (pnl / (trade.entry_price * trade.quantity)) * 100
+          : 0;
+
       return {
         id: trade.id,
         ticker: trade.symbol,
         type: trade.type,
-        shares: trade.quantity,
-        entryPrice: trade.entry_price,
-        stopLoss: trade.stop_loss,
+        shares: trade.quantity || 0,
+        entryPrice: trade.entry_price || 0,
+        stopLoss: trade.stop_loss || 0,
         target1: trade.take_profit,
-        notes: trade.notes,
+        notes: trade.notes || "",
         riskAmount: riskAmount,
         rSize: trade.r_size || defaultRSize.value,
-        entry_time: trade.entry_time,
+        entry_time: trade.entry_time || new Date().toISOString(),
         status: trade.status || "OPEN",
+        current_price:
+          trade.current_price !== undefined && trade.current_price !== null
+            ? trade.current_price
+            : trade.entry_price || 0,
+        pnl: pnl,
+        pnl_percent: pnlPercent,
       };
     });
+
+    console.log(
+      `Successfully processed ${activeTrades.value.length} trades in UI`
+    );
   } catch (error) {
     console.error("Failed to load active trades:", error);
+    // You might want to show an error message to the user here
+    // errorMessage.value = "Failed to load active trades. Please try again.";
   }
 };
 

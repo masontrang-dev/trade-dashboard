@@ -124,14 +124,16 @@ class Trade {
 
   static async getOpenPositions() {
     return new Promise((resolve, reject) => {
+      console.log("Fetching open positions from database...");
       db.all(
         'SELECT * FROM trades WHERE status = "OPEN" ORDER BY entry_time DESC',
         (err, rows) => {
           if (err) {
-            reject(err);
-          } else {
-            resolve(rows);
+            console.error("Error fetching open positions:", err);
+            return reject(err);
           }
+          console.log(`Found ${rows.length} open positions in database`);
+          resolve(rows);
         }
       );
     });

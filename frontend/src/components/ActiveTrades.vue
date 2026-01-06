@@ -33,19 +33,48 @@
           <div class="detail-row">
             <div class="detail-item">
               <span class="label">Entry:</span>
-              <span class="value"
-                >${{
-                  trade.entryPrice ? trade.entryPrice.toFixed(2) : "0.00"
-                }}</span
+              <span class="value">
+                ${{ trade.entryPrice ? trade.entryPrice.toFixed(2) : "0.00" }}
+              </span>
+            </div>
+            <div class="detail-item">
+              <span class="label">Current:</span>
+              <span
+                class="value"
+                :class="{
+                  'text-green-500': trade.current_price > trade.entryPrice,
+                  'text-red-500': trade.current_price < trade.entryPrice,
+                }"
               >
+                ${{
+                  trade.current_price ? trade.current_price.toFixed(2) : "--.--"
+                }}
+              </span>
             </div>
             <div class="detail-item">
               <span class="label">Stop:</span>
-              <span class="value"
-                >${{
-                  trade.stopLoss ? trade.stopLoss.toFixed(2) : "0.00"
-                }}</span
+              <span class="value">
+                ${{ trade.stopLoss ? trade.stopLoss.toFixed(2) : "0.00" }}
+              </span>
+            </div>
+          </div>
+
+          <div class="detail-row">
+            <div class="detail-item">
+              <span class="label">P&L:</span>
+              <span
+                class="value"
+                :class="{
+                  'text-green-500': trade.pnl > 0,
+                  'text-red-500': trade.pnl < 0,
+                }"
               >
+                ${{ trade.pnl !== null ? trade.pnl.toFixed(2) : "--.--" }}
+                <span v-if="trade.pnl_percent !== null" class="text-xs">
+                  ({{ trade.pnl_percent > 0 ? "+" : ""
+                  }}{{ trade.pnl_percent.toFixed(1) }}%)
+                </span>
+              </span>
             </div>
             <div class="detail-item">
               <span class="label">Shares:</span>
@@ -210,7 +239,7 @@
 </template>
 
 <script setup>
-import { ref } from "vue";
+import { ref, computed } from "vue";
 
 const props = defineProps({
   trades: {
@@ -231,30 +260,24 @@ const emit = defineEmits(["trade-closed", "trade-updated"]);
 
 const editingTrade = ref(null);
 
-const currentPnL = (trade) => {
-  if (!trade.currentPrice) return 0;
-
+const currentPnL = computed(() => (trade) => {
+  if (!trade?.current_price) return 0;
   const priceDiff =
     trade.type === "long"
-      ? trade.currentPrice - trade.entryPrice
-      : trade.entryPrice - trade.currentPrice;
-
+      ? trade.entryPrice - trade.current_price
+      : trade.current_price - trade.entryPrice;
   return priceDiff * trade.shares;
-};
-
-const currentRMultiple = (trade) => {
-  if (!trade.currentPrice || trade.riskPerShare === 0) return 0;
-
-  const currentProfit = currentPnL(trade);
-  return currentProfit / trade.riskAmount;
-};
-
-const riskAmountR = (trade) => {
+});
+const currentRMultiple = computed(() => (trade) => {
+  if (!trade?.riskAmount || trade.riskAmount === 0) return 0;
+  return currentPnL.value(trade) / trade.riskAmount;
+});
+const riskAmountR = computed(() => (trade) => {
   if (!trade.riskAmount || props.defaultRSize <= 0) return 0;
   return trade.riskAmount / props.defaultRSize;
-};
+});
 
-const progressToTarget = (trade, target) => {
+const progressToTarget = computed(() => (trade, target) => {
   if (!trade.currentPrice) return 0;
 
   const totalRange =
@@ -269,7 +292,7 @@ const progressToTarget = (trade, target) => {
 
   if (totalRange === 0) return 0;
   return Math.min(100, Math.max(0, (currentProgress / totalRange) * 100));
-};
+});
 
 const editTrade = (trade) => {
   editingTrade.value = { ...trade };
@@ -285,7 +308,7 @@ const saveTradeEdit = () => {
 };
 
 const closeTrade = (trade) => {
-  const profitLoss = currentPnL(trade);
+  const profitLoss = currentPnL.value(trade);
   emit("trade-closed", trade.id, profitLoss);
 };
 </script>

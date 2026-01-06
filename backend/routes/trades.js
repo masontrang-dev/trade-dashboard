@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const Trade = require("../models/Trade");
+const marketData = require("../services/marketData");
 
 router.get("/", async (req, res) => {
   try {
@@ -13,10 +14,88 @@ router.get("/", async (req, res) => {
 
 router.get("/open", async (req, res) => {
   try {
+    console.log("Fetching open trades...");
     const openTrades = await Trade.getOpenPositions();
-    res.json(openTrades);
+    console.log(`Processing ${openTrades.length} open trades...`);
+
+    // Process trades in batches to avoid overwhelming the market data API
+    const BATCH_SIZE = 5;
+    const batches = [];
+    for (let i = 0; i < openTrades.length; i += BATCH_SIZE) {
+      batches.push(openTrades.slice(i, i + BATCH_SIZE));
+    }
+
+    let tradesWithPnL = [];
+    let batchNumber = 1;
+
+    for (const batch of batches) {
+      console.log(
+        `Processing batch ${batchNumber++}/${batches.length} with ${
+          batch.length
+        } trades`
+      );
+
+      const batchResults = await Promise.all(
+        batch.map(async (trade) => {
+          try {
+            console.log(`Processing trade ${trade.id} (${trade.symbol})...`);
+            const pnl = await marketData.calculatePnL(trade).catch((err) => {
+              console.error(
+                `Error calculating PnL for trade ${trade.id}:`,
+                err.message
+              );
+              return null;
+            });
+
+            const current_price = await marketData
+              .getStockPrice(trade.symbol)
+              .catch((err) => {
+                console.error(
+                  `Error getting price for ${trade.symbol}:`,
+                  err.message
+                );
+                return null;
+              });
+
+            console.log(
+              `Trade ${trade.id} processed - PnL: ${pnl}, Current Price: ${current_price}`
+            );
+
+            return {
+              ...trade,
+              current_price,
+              pnl: pnl || 0,
+              pnl_percent:
+                pnl !== null && trade.entry_price && trade.quantity
+                  ? (pnl / (trade.entry_price * trade.quantity)) * 100
+                  : null,
+            };
+          } catch (error) {
+            console.error(
+              `Unexpected error processing trade ${trade.id}:`,
+              error
+            );
+            return {
+              ...trade,
+              current_price: trade.entry_price, // Fallback to entry price
+              pnl: 0,
+              pnl_percent: 0,
+              error: error.message,
+            };
+          }
+        })
+      );
+      tradesWithPnL = [...tradesWithPnL, ...batchResults];
+    }
+
+    console.log(`Successfully processed ${tradesWithPnL.length} trades`);
+    res.json(tradesWithPnL);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error("Error in /open endpoint:", error);
+    res.status(500).json({
+      error: "Failed to load open trades",
+      details: error.message,
+    });
   }
 });
 
@@ -26,6 +105,27 @@ router.get("/:id", async (req, res) => {
     if (!trade) {
       return res.status(404).json({ error: "Trade not found" });
     }
+
+    // Add P&L data if it's an open trade
+    if (trade.status === "OPEN") {
+      try {
+        const pnl = await marketData.calculatePnL(trade);
+        trade.current_price = await marketData
+          .getStockPrice(trade.symbol)
+          .catch(() => null);
+        trade.pnl = pnl;
+        trade.pnl_percent = trade.entry_price
+          ? (pnl / (trade.entry_price * trade.quantity)) * 100
+          : null;
+      } catch (error) {
+        console.error(
+          `Error fetching market data for trade ${trade.id}:`,
+          error
+        );
+        trade.error = "Failed to fetch market data";
+      }
+    }
+
     res.json(trade);
   } catch (error) {
     res.status(500).json({ error: error.message });
