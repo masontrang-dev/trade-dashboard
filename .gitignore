@@ -116,3 +116,5 @@ jspm_packages/
 
 # Vite specific (any directory)
 **/.vite/
+
+/backend/database/trades.db

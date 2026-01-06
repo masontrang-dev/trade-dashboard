@@ -1,5 +1,24 @@
 const db = require("./database");
 
+// Map between frontend camelCase and database snake_case field names
+const fieldMap = {
+  // Frontend field: Database field
+  maxDailyLoss: "max_daily_loss",
+  maxOpenRisk: "max_position_size",
+  maxPositions: "max_open_positions",
+  defaultRSize: "max_risk_per_trade",
+  enableAlerts: "enable_alerts",
+};
+
+// Reverse map for database to frontend
+const reverseFieldMap = Object.entries(fieldMap).reduce(
+  (acc, [frontend, dbField]) => {
+    acc[dbField] = frontend;
+    return acc;
+  },
+  {}
+);
+
 class RiskManagementSettings {
   static async get() {
     return new Promise((resolve, reject) => {
@@ -9,7 +28,26 @@ class RiskManagementSettings {
           if (err) {
             reject(err);
           } else {
-            resolve(row);
+            if (!row) {
+              // Return default values if no settings exist
+              resolve({
+                maxDailyLoss: 500,
+                maxOpenRisk: 1000,
+                maxPositions: 5,
+                defaultRSize: 50,
+                enableAlerts: true,
+              });
+              return;
+            }
+
+            // Convert database field names to frontend field names
+            const frontendRow = {};
+            Object.entries(row).forEach(([dbField, value]) => {
+              const frontendField = reverseFieldMap[dbField] || dbField;
+              frontendRow[frontendField] = value;
+            });
+
+            resolve(frontendRow);
           }
         }
       );
@@ -17,35 +55,114 @@ class RiskManagementSettings {
   }
 
   static async update(settings) {
+    console.log("Updating settings with:", settings);
     return new Promise((resolve, reject) => {
-      const fields = [];
+      const setClauses = [];
       const values = [];
 
-      Object.keys(settings).forEach((key) => {
-        if (settings[key] !== undefined) {
-          fields.push(`${key} = ?`);
-          values.push(settings[key]);
+      // Convert frontend field names to database field names and build the SET clause
+      Object.entries(settings).forEach(([key, value]) => {
+        if (fieldMap[key] !== undefined) {
+          const dbField = fieldMap[key];
+          // Convert boolean to 1/0 for SQLite
+          const dbValue = typeof value === "boolean" ? (value ? 1 : 0) : value;
+          console.log(`Mapping ${key} to ${dbField} with value:`, dbValue);
+          setClauses.push(`${dbField} = ?`);
+          values.push(dbValue);
+        } else {
+          console.log(`Skipping field ${key} - not in fieldMap`);
         }
       });
 
-      if (fields.length === 0) {
-        reject(new Error("No fields to update"));
+      if (setClauses.length === 0) {
+        const error = new Error("No valid fields to update");
+        console.error("Update error:", error.message);
+        reject(error);
         return;
       }
 
+      // Add updated_at to the SET clause and values
+      setClauses.push("updated_at = ?");
       values.push(new Date().toISOString());
 
-      const sql = `UPDATE risk_management_settings SET ${fields.join(
-        ", "
-      )}, updated_at = ? WHERE id = 1`;
+      // First, try to update the first record
+      const updateSql = `
+        UPDATE risk_management_settings 
+        SET ${setClauses.join(", ")}
+        WHERE id = (SELECT id FROM risk_management_settings ORDER BY id LIMIT 1)
+      `;
 
-      db.run(sql, values, function (err) {
-        if (err) {
-          reject(err);
-        } else {
-          resolve({ id: this.lastID, changes: this.changes });
-        }
-      });
+      console.log("Executing SQL:", updateSql);
+      console.log("With values:", values);
+
+      db.run(
+        updateSql,
+        values,
+        function (err) {
+          if (err) {
+            console.error("Error in update query:", err);
+            // If no rows were updated, try to insert
+            if (this.changes === 0) {
+              console.log("No rows updated, attempting to insert new record");
+              const insertFields = Object.entries(settings)
+                .filter(([key]) => fieldMap[key])
+                .map(([key]) => fieldMap[key]);
+
+              if (insertFields.length === 0) {
+                return reject(new Error("No valid fields to insert"));
+              }
+
+              const insertValues = Object.entries(settings)
+                .filter(([key]) => fieldMap[key])
+                .map(([key]) => settings[key]);
+
+              const placeholders = insertFields.map(() => "?").join(", ");
+              const insertSql = `
+              INSERT INTO risk_management_settings (
+                ${insertFields.join(", ")}, 
+                created_at, 
+                updated_at
+              ) VALUES (${placeholders}, ?, ?)
+            `;
+
+              const insertParams = [
+                ...insertValues,
+                new Date().toISOString(),
+                new Date().toISOString(),
+              ];
+
+              console.log("Executing INSERT SQL:", insertSql);
+              console.log("With values:", insertParams);
+
+              db.run(
+                insertSql,
+                insertParams,
+                function (insertErr) {
+                  if (insertErr) {
+                    console.error("Error in insert query:", insertErr);
+                    return reject(insertErr);
+                  }
+                  console.log("Inserted new record with ID:", this.lastID);
+                  // After insert, fetch and return the new record
+                  this.get((getErr, newSettings) => {
+                    if (getErr) return reject(getErr);
+                    resolve(newSettings);
+                  });
+                }.bind(this)
+              );
+            } else {
+              reject(err);
+            }
+          } else {
+            console.log("Update successful, changes:", this.changes);
+            // After update, fetch and return the updated record
+            this.get((getErr, updatedSettings) => {
+              if (getErr) return reject(getErr);
+              resolve(updatedSettings);
+            });
+          }
+        }.bind(this)
+      );
     });
   }
 }

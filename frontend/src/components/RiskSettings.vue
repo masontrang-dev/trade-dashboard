@@ -3,6 +3,25 @@
     <h2>Risk Management Settings</h2>
     <form @submit.prevent="updateSettings">
       <div class="form-group">
+        <label for="defaultRSize">
+          {{ showRValues ? "Default R Size ($)" : "Default R Size ($)" }}
+        </label>
+        <input
+          id="defaultRSize"
+          v-model.number="settings.defaultRSize"
+          type="number"
+          step="1"
+          min="1"
+          required
+        />
+        <small
+          >Default risk amount for new trades (1R = ${{
+            settings.defaultRSize
+          }})</small
+        >
+      </div>
+
+      <div class="form-group">
         <label for="maxDailyLoss">
           {{ showRValues ? "Max Daily Loss" : "Max Daily Loss ($)" }}
         </label>
@@ -11,7 +30,7 @@
             id="maxDailyLoss"
             v-model.number="settings.maxDailyLoss"
             type="number"
-            step="10"
+            step="1"
             min="0"
             required
           />
@@ -31,7 +50,7 @@
             id="maxOpenRisk"
             v-model.number="settings.maxOpenRisk"
             type="number"
-            step="50"
+            step="1"
             min="0"
             required
           />
@@ -54,25 +73,6 @@
           required
         />
         <small>Maximum number of trades to have open simultaneously</small>
-      </div>
-
-      <div class="form-group">
-        <label for="defaultRSize">
-          {{ showRValues ? "Default R Size ($)" : "Default R Size ($)" }}
-        </label>
-        <input
-          id="defaultRSize"
-          v-model.number="settings.defaultRSize"
-          type="number"
-          step="10"
-          min="10"
-          required
-        />
-        <small
-          >Default risk amount for new trades (1R = ${{
-            settings.defaultRSize
-          }})</small
-        >
       </div>
 
       <div class="form-group">
@@ -102,16 +102,17 @@
 </template>
 
 <script setup>
-import { ref, watch, computed } from "vue";
+import { ref, watch, computed, onMounted } from "vue";
+import api from "../services/api";
 
 const props = defineProps({
   maxDailyLoss: {
     type: Number,
-    default: 500,
+    default: 2500,
   },
   maxOpenRisk: {
     type: Number,
-    default: 2000,
+    default: 5000,
   },
   defaultRSize: {
     type: Number,
@@ -155,15 +156,31 @@ watch(
   }
 );
 
-const updateSettings = () => {
-  // Save to localStorage for persistence
-  localStorage.setItem("riskSettings", JSON.stringify(settings.value));
+const updateSettings = async () => {
+  try {
+    const settingsToSave = {
+      maxDailyLoss: settings.value.maxDailyLoss,
+      maxOpenRisk: settings.value.maxOpenRisk,
+      maxPositions: settings.value.maxPositions,
+      defaultRSize: settings.value.defaultRSize,
+      enableAlerts: settings.value.enableAlerts,
+    };
 
-  emit("settings-updated", {
-    maxDailyLoss: settings.value.maxDailyLoss,
-    maxOpenRisk: settings.value.maxOpenRisk,
-    defaultRSize: settings.value.defaultRSize,
-  });
+    await api.updateRiskSettings(settingsToSave);
+
+    // Still emit the event for local state updates
+    emit("settings-updated", {
+      maxDailyLoss: settings.value.maxDailyLoss,
+      maxOpenRisk: settings.value.maxOpenRisk,
+      defaultRSize: settings.value.defaultRSize,
+    });
+
+    // Show success message or handle as needed
+    console.log("Risk settings saved successfully");
+  } catch (error) {
+    console.error("Failed to save risk settings:", error);
+    // You might want to show an error message to the user here
+  }
 };
 
 // Computed properties for R value display
@@ -175,16 +192,28 @@ const maxOpenRiskR = computed(() => {
   return settings.value.maxOpenRisk / settings.value.defaultRSize;
 });
 
-// Load settings from localStorage on mount
-const loadSettings = () => {
-  const saved = localStorage.getItem("riskSettings");
-  if (saved) {
-    const parsedSettings = JSON.parse(saved);
-    settings.value = { ...settings.value, ...parsedSettings };
+// Load settings from API on mount
+const loadSettings = async () => {
+  try {
+    const savedSettings = await api.getRiskSettings();
+    if (savedSettings) {
+      // Only update the settings that exist in the saved settings
+      Object.keys(savedSettings).forEach((key) => {
+        if (settings.value[key] !== undefined) {
+          settings.value[key] = savedSettings[key];
+        }
+      });
+    }
+  } catch (error) {
+    console.error("Failed to load risk settings:", error);
+    // Error handling without localStorage fallback
   }
 };
 
-loadSettings();
+// Load settings when component is mounted
+onMounted(() => {
+  loadSettings();
+});
 </script>
 
 <style scoped>

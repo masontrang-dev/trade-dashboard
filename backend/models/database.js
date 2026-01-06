@@ -21,6 +21,7 @@ db.serialize(() => {
       stop_loss_percentage REAL NOT NULL DEFAULT 2.0,
       take_profit_percentage REAL NOT NULL DEFAULT 4.0,
       max_open_positions INTEGER NOT NULL DEFAULT 5,
+      enable_alerts BOOLEAN NOT NULL DEFAULT 1,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )

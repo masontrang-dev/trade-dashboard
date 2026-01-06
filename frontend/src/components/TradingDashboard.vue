@@ -96,12 +96,13 @@
 </template>
 
 <script setup>
-import { ref, computed } from "vue";
+import { ref, computed, onMounted } from "vue";
 import TradeForm from "./TradeForm.vue";
 import RiskSettings from "./RiskSettings.vue";
 import ActiveTrades from "./ActiveTrades.vue";
 import TradeHistory from "./TradeHistory.vue";
 import RToggle from "./RToggle.vue";
+import api from "../services/api";
 
 const maxDailyLoss = ref(500);
 const maxOpenRisk = ref(2000);
@@ -110,19 +111,33 @@ const tradeHistory = ref([]);
 const showRValues = ref(false);
 const defaultRSize = ref(2500);
 
-// Load risk settings from localStorage on mount
-const loadRiskSettings = () => {
-  const saved = localStorage.getItem("riskSettings");
-  if (saved) {
-    const parsedSettings = JSON.parse(saved);
-    if (parsedSettings.maxDailyLoss) {
-      maxDailyLoss.value = parsedSettings.maxDailyLoss;
+// Load risk settings from API on mount
+const loadRiskSettings = async () => {
+  try {
+    const settings = await api.getRiskSettings();
+    if (settings) {
+      if (settings.maxDailyLoss !== undefined) {
+        maxDailyLoss.value = settings.maxDailyLoss;
+      }
+      if (settings.maxOpenRisk !== undefined) {
+        maxOpenRisk.value = settings.maxOpenRisk;
+      }
+      if (settings.defaultRSize !== undefined) {
+        defaultRSize.value = settings.defaultRSize;
+      }
     }
-    if (parsedSettings.maxOpenRisk) {
-      maxOpenRisk.value = parsedSettings.maxOpenRisk;
-    }
-    if (parsedSettings.defaultRSize) {
-      defaultRSize.value = parsedSettings.defaultRSize;
+  } catch (error) {
+    console.error("Failed to load risk settings:", error);
+    // Fallback to localStorage if API fails
+    const saved = localStorage.getItem("riskSettings");
+    if (saved) {
+      const parsedSettings = JSON.parse(saved);
+      if (parsedSettings.maxDailyLoss)
+        maxDailyLoss.value = parsedSettings.maxDailyLoss;
+      if (parsedSettings.maxOpenRisk)
+        maxOpenRisk.value = parsedSettings.maxOpenRisk;
+      if (parsedSettings.defaultRSize)
+        defaultRSize.value = parsedSettings.defaultRSize;
     }
   }
 
@@ -133,7 +148,10 @@ const loadRiskSettings = () => {
   }
 };
 
-loadRiskSettings();
+// Load settings when component is mounted
+onMounted(() => {
+  loadRiskSettings();
+});
 
 const dailyRiskUsed = computed(() => {
   const today = new Date().toDateString();
@@ -202,11 +220,23 @@ const handleTradeUpdated = (updatedTrade) => {
 };
 
 const handleRiskSettingsUpdated = (settings) => {
-  maxDailyLoss.value = settings.maxDailyLoss;
-  maxOpenRisk.value = settings.maxOpenRisk;
-  if (settings.defaultRSize) {
+  if (settings.maxDailyLoss !== undefined) {
+    maxDailyLoss.value = settings.maxDailyLoss;
+  }
+  if (settings.maxOpenRisk !== undefined) {
+    maxOpenRisk.value = settings.maxOpenRisk;
+  }
+  if (settings.defaultRSize !== undefined) {
     defaultRSize.value = settings.defaultRSize;
   }
+
+  // Update local storage as a fallback
+  const currentSettings = {
+    maxDailyLoss: maxDailyLoss.value,
+    maxOpenRisk: maxOpenRisk.value,
+    defaultRSize: defaultRSize.value,
+  };
+  localStorage.setItem("riskSettings", JSON.stringify(currentSettings));
 };
 
 const handleRToggle = (showR) => {
