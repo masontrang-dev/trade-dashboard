@@ -47,6 +47,10 @@ class ApiService {
     return this.request("/trades");
   }
 
+  async getClosedTrades() {
+    return this.request("/trades/closed");
+  }
+
   async getOpenTrades() {
     return this.request("/trades/open");
   }
@@ -72,6 +76,13 @@ class ApiService {
   async deleteTrade(id) {
     return this.request(`/trades/${id}`, {
       method: "DELETE",
+    });
+  }
+
+  async closeTrade(id, exitPrice) {
+    return this.request(`/trades/${id}/close`, {
+      method: "POST",
+      body: JSON.stringify({ exitPrice }),
     });
   }
 

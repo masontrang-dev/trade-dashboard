@@ -108,6 +108,30 @@ const maxDailyLoss = ref(500);
 const maxOpenRisk = ref(2000);
 const activeTrades = ref([]);
 const tradeHistory = ref([]);
+
+// Load closed trades from API
+const loadClosedTrades = async () => {
+  try {
+    const closedTrades = await api.getClosedTrades();
+    tradeHistory.value = closedTrades.map((trade) => ({
+      id: trade.id,
+      ticker: trade.symbol,
+      type: trade.type.toLowerCase(),
+      entryPrice: trade.entry_price,
+      exitPrice: trade.exit_price,
+      quantity: trade.quantity,
+      profitLoss: trade.profit_loss,
+      entryDate: trade.entry_time,
+      closeDate: trade.exit_time,
+      notes: trade.notes,
+      riskAmount: trade.risk_amount,
+      rSize: trade.r_size,
+    }));
+    console.log("Loaded closed trades:", tradeHistory.value);
+  } catch (error) {
+    console.error("Error loading closed trades:", error);
+  }
+};
 const showRValues = ref(false);
 const defaultRSize = ref(2500);
 
@@ -219,7 +243,7 @@ const loadRiskSettings = async () => {
 // Load data when component mounts
 onMounted(async () => {
   await loadRiskSettings();
-  await loadActiveTrades();
+  await Promise.all([loadActiveTrades(), loadClosedTrades()]);
 });
 
 // Load settings when component is mounted
@@ -312,16 +336,12 @@ const handleTradeAdded = async (trade) => {
   }
 };
 
-const handleTradeClosed = (tradeId, profitLoss) => {
-  const tradeIndex = activeTrades.value.findIndex((t) => t.id === tradeId);
-  if (tradeIndex !== -1) {
-    const closedTrade = activeTrades.value.splice(tradeIndex, 1)[0];
-    closedTrade.status = "closed";
-    closedTrade.closeDate = new Date().toISOString();
-    closedTrade.profitLoss = profitLoss;
-    closedTrade.realizedLoss = profitLoss < 0 ? Math.abs(profitLoss) : 0;
-    tradeHistory.value.push(closedTrade);
-  }
+const handleTradeClosed = async () => {
+  // Refresh both active and closed trades
+  await Promise.all([loadActiveTrades(), loadClosedTrades()]);
+
+  // Update risk metrics
+  await loadRiskSettings();
 };
 
 const handleTradeUpdated = (updatedTrade) => {

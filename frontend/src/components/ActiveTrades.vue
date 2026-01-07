@@ -240,6 +240,7 @@
 
 <script setup>
 import { ref, computed } from "vue";
+import apiService from "../services/api";
 
 const props = defineProps({
   trades: {
@@ -307,9 +308,25 @@ const saveTradeEdit = () => {
   closeEditModal();
 };
 
-const closeTrade = (trade) => {
-  const profitLoss = currentPnL.value(trade);
-  emit("trade-closed", trade.id, profitLoss);
+const closeTrade = async (trade) => {
+  const exitPrice = parseFloat(
+    prompt(
+      `Enter exit price for ${trade.symbol}:`,
+      trade.current_price || trade.entry_price
+    )
+  );
+
+  if (!exitPrice || isNaN(exitPrice)) {
+    return; // User cancelled or entered invalid price
+  }
+  try {
+    await apiService.closeTrade(trade.id, exitPrice);
+    emit("trade-closed"); // Notify parent to refresh the trades list
+    alert(`Trade closed successfully!`);
+  } catch (error) {
+    console.error("Error closing trade:", error);
+    alert(`Error closing trade: ${error.message}`);
+  }
 };
 </script>
 

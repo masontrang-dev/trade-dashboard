@@ -12,6 +12,21 @@ router.get("/", async (req, res) => {
   }
 });
 
+// Get all closed trades
+router.get("/closed", async (req, res) => {
+  try {
+    const closedTrades = await Trade.getClosedTrades();
+    res.json(closedTrades);
+  } catch (error) {
+    console.error("Error in /closed endpoint:", error);
+    res.status(500).json({
+      error: "Failed to load closed trades",
+      details: error.message,
+    });
+  }
+});
+
+// Get all open trades
 router.get("/open", async (req, res) => {
   try {
     console.log("Fetching open trades...");
@@ -178,6 +193,41 @@ router.put("/:id", async (req, res) => {
     res.json(updatedTrade);
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// Close a trade with exit price
+router.post("/:id/close", async (req, res) => {
+  try {
+    const { exitPrice } = req.body;
+
+    if (exitPrice === undefined || exitPrice === null) {
+      return res.status(400).json({ error: "Exit price is required" });
+    }
+
+    if (isNaN(exitPrice) || exitPrice <= 0) {
+      return res.status(400).json({ error: "Invalid exit price" });
+    }
+
+    const result = await Trade.close(req.params.id, parseFloat(exitPrice));
+
+    if (result.changes === 0) {
+      return res
+        .status(404)
+        .json({ error: "Trade not found or already closed" });
+    }
+
+    res.json({
+      message: "Trade closed successfully",
+      tradeId: result.id,
+      pnl: result.pnl,
+    });
+  } catch (error) {
+    console.error("Error closing trade:", error);
+    res.status(500).json({
+      error: "Failed to close trade",
+      details: error.message,
+    });
   }
 });
 

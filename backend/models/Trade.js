@@ -122,6 +122,50 @@ class Trade {
     });
   }
 
+  static async close(id, exitPrice) {
+    return new Promise((resolve, reject) => {
+      // First get the trade to calculate P&L
+      this.getById(id)
+        .then((trade) => {
+          if (!trade) {
+            reject(new Error("Trade not found"));
+            return;
+          }
+
+          // Calculate P&L
+          let pnl;
+          if (trade.type === "LONG") {
+            pnl = (exitPrice - trade.entry_price) * trade.quantity;
+          } else {
+            // SHORT
+            pnl = (trade.entry_price - exitPrice) * trade.quantity;
+          }
+
+          // Update the trade with exit price, P&L and close it
+          const now = new Date().toISOString();
+          const sql = `
+          UPDATE trades 
+          SET 
+            status = 'CLOSED',
+            exit_price = ?,
+            profit_loss = ?,
+            exit_time = ?,
+            updated_at = ?
+          WHERE id = ?
+        `;
+
+          db.run(sql, [exitPrice, pnl, now, now, id], function (err) {
+            if (err) {
+              reject(err);
+            } else {
+              resolve({ id, changes: this.changes, pnl });
+            }
+          });
+        })
+        .catch(reject);
+    });
+  }
+
   static async getOpenPositions() {
     return new Promise((resolve, reject) => {
       console.log("Fetching open positions from database...");
@@ -133,6 +177,23 @@ class Trade {
             return reject(err);
           }
           console.log(`Found ${rows.length} open positions in database`);
+          resolve(rows);
+        }
+      );
+    });
+  }
+
+  static async getClosedTrades() {
+    return new Promise((resolve, reject) => {
+      console.log("Fetching closed trades from database...");
+      db.all(
+        'SELECT * FROM trades WHERE status = "CLOSED" ORDER BY exit_time DESC',
+        (err, rows) => {
+          if (err) {
+            console.error("Error fetching closed trades:", err);
+            return reject(err);
+          }
+          console.log(`Found ${rows.length} closed trades in database`);
           resolve(rows);
         }
       );
