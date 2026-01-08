@@ -1,20 +1,52 @@
 <template>
   <div class="dashboard">
     <header class="dashboard-header">
-      <div class="header-top">
-        <h1>{{ tradingMode === "DAY" ? "Day" : "Swing" }} Trading Dashboard</h1>
-        <div class="header-controls">
-          <button @click="openSettings" class="settings-btn" title="Settings">
+      <div class="header-container">
+        <div class="header-left">
+          <div class="brand">
+            <div class="brand-icon">
+              <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                <rect width="32" height="32" rx="8" fill="url(#gradient)" />
+                <path
+                  d="M8 16L14 10L18 14L24 8"
+                  stroke="white"
+                  stroke-width="2.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <path
+                  d="M8 22L14 16L18 20L24 14"
+                  stroke="white"
+                  stroke-width="2.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  opacity="0.5"
+                />
+                <defs>
+                  <linearGradient id="gradient" x1="0" y1="0" x2="32" y2="32">
+                    <stop offset="0%" stop-color="#667eea" />
+                    <stop offset="100%" stop-color="#764ba2" />
+                  </linearGradient>
+                </defs>
+              </svg>
+            </div>
+            <div class="brand-text">
+              <h1>Trading Dashboard</h1>
+              <span class="mode-badge">{{
+                tradingMode === "DAY" ? "Day Trading" : "Swing Trading"
+              }}</span>
+            </div>
+          </div>
+        </div>
+        <div class="header-right">
+          <button @click="openSettings" class="settings-btn">
             <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="20"
-              height="20"
+              width="18"
+              height="18"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
               stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
             >
               <circle cx="12" cy="12" r="3"></circle>
               <path
@@ -23,60 +55,135 @@
             </svg>
             Settings
           </button>
-          <RToggle @toggle-changed="handleRToggle" />
         </div>
       </div>
-      <div class="risk-summary">
+      <div class="risk-cards">
         <div class="risk-card">
-          <h3>Daily Risk Used</h3>
-          <span
-            class="risk-value"
-            :class="{ 'risk-warning': dailyRiskPercentage > 80 }"
-          >
-            <template v-if="showRValues">
-              {{ dailyRiskUsedR.toFixed(2) }}R / {{ maxDailyLossR.toFixed(2) }}R
-              <small
-                >(${{ dailyRiskUsed.toFixed(2) }} / ${{
-                  maxDailyLoss.toFixed(2)
-                }})</small
+          <div class="risk-card-header">
+            <div class="risk-card-icon daily">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
               >
-            </template>
-            <template v-else>
-              ${{ dailyRiskUsed.toFixed(2) }} / ${{ maxDailyLoss.toFixed(2) }}
-            </template>
-          </span>
-          <div class="progress-bar">
-            <div
-              class="progress-fill"
-              :style="{ width: dailyRiskPercentage + '%' }"
-              :class="{ 'risk-warning': dailyRiskPercentage > 80 }"
-            ></div>
+                <line x1="12" y1="1" x2="12" y2="23"></line>
+                <path
+                  d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"
+                ></path>
+              </svg>
+            </div>
+            <div class="risk-card-title">
+              <h3>Daily Risk Used</h3>
+              <span class="risk-card-subtitle"
+                >{{ dailyRiskPercentage.toFixed(1) }}% of limit</span
+              >
+            </div>
+          </div>
+          <div class="risk-card-body">
+            <div class="risk-amount-container">
+              <div class="risk-display">
+                <span class="risk-label">R Value</span>
+                <div
+                  class="risk-amount"
+                  :class="{ 'risk-warning': dailyRiskPercentage > 80 }"
+                >
+                  <span class="amount-primary"
+                    >{{ dailyRiskUsedR.toFixed(2) }}R</span
+                  >
+                  <span class="amount-secondary"
+                    >/ {{ maxDailyLossR.toFixed(2) }}R</span
+                  >
+                </div>
+              </div>
+              <div class="dollars-display">
+                <span class="risk-label">Dollar Value</span>
+                <div class="dollars-amount">
+                  <span class="dollars-text"
+                    >${{ dailyRiskUsed.toFixed(0) }} / ${{
+                      maxDailyLoss.toFixed(0)
+                    }}</span
+                  >
+                </div>
+              </div>
+            </div>
+            <div class="progress-bar-modern">
+              <div class="progress-track">
+                <div
+                  class="progress-fill"
+                  :style="{ width: Math.min(dailyRiskPercentage, 100) + '%' }"
+                  :class="{
+                    'progress-warning': dailyRiskPercentage > 80,
+                    'progress-danger': dailyRiskPercentage > 100,
+                  }"
+                ></div>
+              </div>
+            </div>
           </div>
         </div>
+
         <div class="risk-card">
-          <h3>Open Risk</h3>
-          <span
-            class="risk-value"
-            :class="{ 'risk-warning': openRiskPercentage > 80 }"
-          >
-            <template v-if="showRValues">
-              {{ totalOpenRiskR.toFixed(2) }}R / {{ maxOpenRiskR.toFixed(2) }}R
-              <small
-                >(${{ totalOpenRisk.toFixed(2) }} / ${{
-                  maxOpenRisk.toFixed(2)
-                }})</small
+          <div class="risk-card-header">
+            <div class="risk-card-icon open">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
               >
-            </template>
-            <template v-else>
-              ${{ totalOpenRisk.toFixed(2) }} / ${{ maxOpenRisk.toFixed(2) }}
-            </template>
-          </span>
-          <div class="progress-bar">
-            <div
-              class="progress-fill"
-              :style="{ width: openRiskPercentage + '%' }"
-              :class="{ 'risk-warning': openRiskPercentage > 80 }"
-            ></div>
+                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+              </svg>
+            </div>
+            <div class="risk-card-title">
+              <h3>Open Risk</h3>
+              <span class="risk-card-subtitle"
+                >{{ openRiskPercentage.toFixed(1) }}% of limit</span
+              >
+            </div>
+          </div>
+          <div class="risk-card-body">
+            <div class="risk-amount-container">
+              <div class="risk-display">
+                <span class="risk-label">R Value</span>
+                <div
+                  class="risk-amount"
+                  :class="{ 'risk-warning': openRiskPercentage > 80 }"
+                >
+                  <span class="amount-primary"
+                    >{{ totalOpenRiskR.toFixed(2) }}R</span
+                  >
+                  <span class="amount-secondary"
+                    >/ {{ maxOpenRiskR.toFixed(2) }}R</span
+                  >
+                </div>
+              </div>
+              <div class="dollars-display">
+                <span class="risk-label">Dollar Value</span>
+                <div class="dollars-amount">
+                  <span class="dollars-text"
+                    >${{ totalOpenRisk.toFixed(0) }} / ${{
+                      maxOpenRisk.toFixed(0)
+                    }}</span
+                  >
+                </div>
+              </div>
+            </div>
+            <div class="progress-bar-modern">
+              <div class="progress-track">
+                <div
+                  class="progress-fill"
+                  :style="{ width: Math.min(openRiskPercentage, 100) + '%' }"
+                  :class="{
+                    'progress-warning': openRiskPercentage > 80,
+                    'progress-danger': openRiskPercentage > 100,
+                  }"
+                ></div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -137,7 +244,6 @@ import { ref, computed, onMounted } from "vue";
 import TradeForm from "./TradeForm.vue";
 import ActiveTrades from "./ActiveTrades.vue";
 import TradeHistory from "./TradeHistory.vue";
-import RToggle from "./RToggle.vue";
 import SettingsModal from "./SettingsModal.vue";
 import api from "../services/api";
 
@@ -303,12 +409,6 @@ const loadRiskSettings = async () => {
     }
   }
 
-  // Load R toggle state
-  const savedToggle = localStorage.getItem("rToggleState");
-  if (savedToggle) {
-    showRValues.value = JSON.parse(savedToggle);
-  }
-
   // Load trading mode and dev mode from backend
   try {
     const modeSettings = await api.getModeSettings();
@@ -379,6 +479,18 @@ const dailyRiskPercentage = computed(() => {
 
 const openRiskPercentage = computed(() => {
   return (totalOpenRisk.value / maxOpenRisk.value) * 100;
+});
+
+const remainingDailyRisk = computed(() => {
+  return Math.max(0, maxDailyLoss.value - dailyRiskUsed.value);
+});
+
+const remainingDailyRiskR = computed(() => {
+  return remainingDailyRisk.value / defaultRSize.value;
+});
+
+const remainingRiskPercentage = computed(() => {
+  return (remainingDailyRisk.value / maxDailyLoss.value) * 100;
 });
 
 const handleTradeAdded = async (trade) => {
@@ -479,12 +591,6 @@ const handleRiskSettingsUpdated = (settings) => {
   localStorage.setItem("riskSettings", JSON.stringify(currentSettings));
 };
 
-const handleRToggle = (showR) => {
-  showRValues.value = showR;
-  // Save toggle state to localStorage
-  localStorage.setItem("rToggleState", JSON.stringify(showR));
-};
-
 const handleTradingModeChange = async (newMode) => {
   try {
     // Call API to switch mode and re-evaluate trades
@@ -583,52 +689,96 @@ const handleSettingsSave = async (settings) => {
 </script>
 
 <style scoped>
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+
 .dashboard {
-  padding: 20px;
-  max-width: 1400px;
-  margin: 0 auto;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f5f7fa 0%, #e8ecf1 100%);
+  padding: 32px;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
 }
 
 .dashboard-header {
-  margin-bottom: 30px;
+  max-width: 1400px;
+  margin: 0 auto 32px;
 }
 
-.header-top {
+/* Header Container */
+.header-container {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
-  gap: 20px;
+  margin-bottom: 24px;
+  padding: 20px 28px;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
-.header-controls {
+.header-left {
   display: flex;
   align-items: center;
-  gap: 15px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.brand-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.brand-text h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #1a202c;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+}
+
+.mode-badge {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #667eea;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .settings-btn {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 20px;
-  background: white;
-  border: 2px solid #e1e8ed;
+  padding: 10px 18px;
+  background: #f7fafc;
+  border: 1px solid #e2e8f0;
   border-radius: 10px;
-  color: #5a6c7d;
-  font-size: 0.9rem;
+  color: #4a5568;
+  font-size: 0.875rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .settings-btn:hover {
-  background: #f8f9fa;
-  border-color: #3498db;
-  color: #3498db;
+  background: white;
+  border-color: #cbd5e0;
+  color: #2d3748;
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(52, 152, 219, 0.2);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 }
 
 .settings-btn svg {
@@ -639,103 +789,379 @@ const handleSettingsSave = async (settings) => {
   transform: rotate(90deg);
 }
 
-.dashboard-header h1 {
-  color: #2c3e50;
-  font-size: 2.5rem;
-  margin: 0;
+/* Metrics Bar */
+.metrics-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 28px;
+  background: white;
+  border-radius: 16px;
+  margin-bottom: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
-.risk-summary {
+.metric-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+
+.metric-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 10px;
+  color: white;
+  flex-shrink: 0;
+}
+
+.metric-mode .metric-icon {
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+
+.metric-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.metric-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #718096;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.metric-value {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #1a202c;
+  letter-spacing: -0.025em;
+}
+
+.metric-value.value-warning {
+  color: #e53e3e;
+}
+
+.metric-divider {
+  width: 1px;
+  height: 40px;
+  background: linear-gradient(to bottom, transparent, #e2e8f0, transparent);
+  margin: 0 8px;
+}
+
+/* Risk Cards */
+.risk-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 20px;
-  margin-bottom: 30px;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: 24px;
 }
 
 .risk-card {
   background: white;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  border: 1px solid #f0f0f0;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.risk-card:hover {
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+}
+
+.risk-card-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.risk-card-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
   border-radius: 12px;
-  padding: 20px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  border: 1px solid #e1e8ed;
+  flex-shrink: 0;
 }
 
-.risk-card h3 {
-  margin: 0 0 10px 0;
-  color: #5a6c7d;
-  font-size: 0.9rem;
+.risk-card-icon.daily {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.risk-card-icon.open {
+  background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+  color: white;
+}
+
+.risk-card-title h3 {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #1a202c;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.05em;
 }
 
-.risk-value {
+.risk-card-subtitle {
   display: block;
-  font-size: 1.5rem;
-  font-weight: bold;
-  color: #2c3e50;
-  margin-bottom: 10px;
-}
-
-.risk-value small {
-  display: block;
-  font-size: 0.8rem;
-  color: #7f8c8d;
-  font-weight: normal;
   margin-top: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #718096;
 }
 
-.risk-value.risk-warning {
-  color: #e74c3c;
+.risk-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
-.progress-bar {
+.risk-amount-container {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 32px;
+  margin-bottom: 4px;
+}
+
+.risk-display,
+.dollars-display {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.risk-display {
+  flex: 1;
+}
+
+.risk-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: #a0aec0;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.risk-amount {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.amount-primary {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #1a202c;
+  letter-spacing: -0.025em;
+}
+
+.amount-secondary {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #a0aec0;
+}
+
+.risk-amount.risk-warning .amount-primary {
+  color: #e53e3e;
+}
+
+.risk-amount.risk-warning .amount-secondary {
+  color: #fc8181;
+}
+
+.dollars-amount {
+  display: flex;
+  align-items: baseline;
+}
+
+.dollars-text {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #718096;
+  white-space: nowrap;
+  letter-spacing: -0.01em;
+}
+
+/* Modern Progress Bar */
+.progress-bar-modern {
   width: 100%;
-  height: 8px;
-  background-color: #ecf0f1;
-  border-radius: 4px;
+}
+
+.progress-track {
+  width: 100%;
+  height: 10px;
+  background: #edf2f7;
+  border-radius: 10px;
   overflow: hidden;
+  position: relative;
 }
 
 .progress-fill {
   height: 100%;
-  background-color: #3498db;
-  transition: width 0.3s ease;
+  background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+  border-radius: 10px;
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
 }
 
-.progress-fill.risk-warning {
-  background-color: #e74c3c;
+.progress-fill::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.3),
+    transparent
+  );
+  animation: shimmer 2s infinite;
 }
 
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.progress-fill.progress-warning {
+  background: linear-gradient(90deg, #f6ad55 0%, #ed8936 100%);
+}
+
+.progress-fill.progress-danger {
+  background: linear-gradient(90deg, #fc8181 0%, #e53e3e 100%);
+}
+
+/* Main Content */
 .dashboard-main {
+  max-width: 1400px;
+  margin: 0 auto;
   display: grid;
   grid-template-columns: 1fr 2fr;
-  gap: 30px;
+  gap: 24px;
 }
 
 .left-panel,
 .right-panel {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 24px;
+}
+
+/* Responsive Design */
+@media (max-width: 1200px) {
+  .risk-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .risk-amount-container {
+    gap: 24px;
+  }
 }
 
 @media (max-width: 1024px) {
   .dashboard-main {
     grid-template-columns: 1fr;
   }
+
+  .metrics-bar {
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+
+  .metric-divider {
+    display: none;
+  }
+
+  .metric-item {
+    min-width: calc(50% - 8px);
+  }
 }
 
 @media (max-width: 768px) {
   .dashboard {
-    padding: 10px;
+    padding: 16px;
   }
 
-  .dashboard-header h1 {
-    font-size: 2rem;
+  .header-container {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 20px;
   }
 
-  .risk-summary {
+  .header-right {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .brand-text h1 {
+    font-size: 1.25rem;
+  }
+
+  .metrics-bar {
+    padding: 16px;
+  }
+
+  .metric-item {
+    min-width: 100%;
+  }
+
+  .metric-icon {
+    width: 36px;
+    height: 36px;
+  }
+
+  .metric-value {
+    font-size: 1.125rem;
+  }
+
+  .risk-cards {
     grid-template-columns: 1fr;
+  }
+
+  .risk-card {
+    padding: 20px;
+  }
+
+  .risk-amount-container {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .amount-primary {
+    font-size: 1.5rem;
+  }
+
+  .amount-secondary {
+    font-size: 1rem;
+  }
+
+  .amount-dollars {
+    align-self: flex-start;
+  }
+
+  .dollars-text {
+    font-size: 1rem;
   }
 }
 </style>
