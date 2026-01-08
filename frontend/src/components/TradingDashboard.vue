@@ -198,6 +198,9 @@
           :state-tax-rate="stateTaxRate"
           :federal-tax-rate="federalTaxRate"
           :margin-interest-rate="marginInterestRate"
+          :max-daily-loss="maxDailyLoss"
+          :daily-risk-used="dailyRiskUsed"
+          :trading-mode="tradingMode"
         />
       </div>
 

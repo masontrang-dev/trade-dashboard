@@ -31,34 +31,68 @@
         </div>
         <div class="form-group">
           <label for="strategy">Strategy</label>
-          <input
-            id="strategy"
-            v-model="trade.strategy"
-            type="text"
-            placeholder="Breakout, Pullback, etc."
-          />
-        </div>
-      </div>
-
-      <div class="form-row">
-        <div class="form-group">
-          <label for="shares">Position Size (Shares)</label>
-          <div class="calculated-shares">
-            <input
-              id="shares"
-              v-model.number="trade.shares"
-              type="number"
-              step="1"
-              min="1"
-              placeholder="Auto-calculated"
-              readonly
-            />
-            <small class="calculation-info">
-              {{ sharesCalculationInfo }}
-            </small>
-            <small class="position-value">
-              Position Value: ${{ positionValue.toFixed(2) }}
-            </small>
+          <div
+            class="custom-select"
+            @click="toggleStrategyDropdown"
+            v-click-outside="closeStrategyDropdown"
+          >
+            <div class="select-trigger">
+              <span :class="{ placeholder: !trade.strategy }">
+                {{ trade.strategy || "" }}
+              </span>
+              <svg
+                class="dropdown-arrow"
+                :class="{ open: strategyDropdownOpen }"
+                width="12"
+                height="12"
+                viewBox="0 0 12 12"
+                fill="none"
+              >
+                <path
+                  d="M2 4L6 8L10 4"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </div>
+            <div class="select-options" v-if="strategyDropdownOpen">
+              <div
+                class="select-option"
+                :class="{ selected: trade.strategy === null }"
+                @click="selectStrategy(null)"
+              >
+                <span class="option-text placeholder"
+                  >Select a strategy...</span
+                >
+              </div>
+              <div
+                v-for="strategy in strategyOptions"
+                :key="strategy"
+                class="select-option"
+                :class="{ selected: trade.strategy === strategy }"
+                @click="selectStrategy(strategy)"
+              >
+                <span class="option-text">{{ strategy }}</span>
+                <svg
+                  v-if="trade.strategy === strategy"
+                  class="check-icon"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                >
+                  <path
+                    d="M3 8L6 11L13 4"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -88,7 +122,28 @@
           required
         />
       </div>
-
+      <div class="form-row">
+        <div class="form-group">
+          <label for="shares">Position Size (Shares)</label>
+          <div class="calculated-shares">
+            <input
+              id="shares"
+              v-model.number="trade.shares"
+              type="number"
+              step="1"
+              min="1"
+              placeholder="Auto-calculated"
+              readonly
+            />
+            <small class="calculation-info">
+              {{ sharesCalculationInfo }}
+            </small>
+            <small class="position-value">
+              Position Value: ${{ positionValue.toFixed(2) }}
+            </small>
+          </div>
+        </div>
+      </div>
       <div class="form-group">
         <label for="target1">Target 1 (+1R)</label>
         <input
@@ -116,7 +171,7 @@
       </div>
 
       <div class="form-group">
-        <label for="target3">Target 3 (Optional)</label>
+        <label for="target3">Target 3</label>
         <input
           id="target3"
           v-model.number="trade.target3"
@@ -125,7 +180,6 @@
           min="0.01"
           placeholder="Enter custom target"
         />
-        <small>Optional custom target level</small>
       </div>
 
       <div class="form-group">
@@ -136,6 +190,8 @@
         </select>
       </div>
 
+      <div class="section-divider"></div>
+
       <div class="form-group">
         <label for="notes">Notes</label>
         <textarea
@@ -145,6 +201,9 @@
           placeholder="Trade setup reasoning..."
         ></textarea>
       </div>
+
+      <div class="section-divider"></div>
+
       <div class="form-row">
         <div class="form-group">
           <label for="stateTaxRate">State Tax Rate (%)</label>
@@ -159,7 +218,6 @@
             disabled
             readonly
           />
-          <small>From risk settings (edit in Risk Management Settings)</small>
         </div>
         <div class="form-group">
           <label for="federalTaxRate">Federal Tax Rate (%)</label>
@@ -174,7 +232,6 @@
             disabled
             readonly
           />
-          <small>From risk settings (edit in Risk Management Settings)</small>
         </div>
       </div>
 
@@ -191,49 +248,44 @@
           disabled
           readonly
         />
-        <small>From risk settings (edit in Risk Management Settings)</small>
       </div>
 
+      <div
+        class="section-divider"
+        v-if="trade.entryPrice && trade.stopLoss"
+      ></div>
+
       <div class="trade-summary" v-if="trade.entryPrice && trade.stopLoss">
-        <h3>Trade Summary</h3>
-        <div class="summary-grid">
-          <div class="summary-item">
-            <span class="label">Risk per Share:</span>
-            <span class="value">${{ riskPerShare.toFixed(2) }}</span>
-          </div>
-          <div class="summary-item">
-            <span class="label"
-              >{{ showRValues ? "Total Risk" : "Total Risk" }}:</span
-            >
-            <span class="value">
-              <template v-if="showRValues">
-                {{ totalRiskR.toFixed(2) }}R
-                <small>(${{ totalRisk.toFixed(2) }})</small>
-              </template>
-              <template v-else> ${{ totalRisk.toFixed(2) }} </template>
+        <h3>Trade Risk</h3>
+        <div class="risk-list">
+          <div class="risk-item">
+            <span class="bullet">•</span>
+            <span class="risk-text">
+              <strong>Risk per Share:</strong> ${{ riskPerShare.toFixed(2) }}
             </span>
           </div>
-          <div class="summary-item">
-            <span class="label">Target 1 (+1R):</span>
-            <span class="value">${{ calculatedTarget1.toFixed(2) }}</span>
+          <div class="risk-item">
+            <span class="bullet">•</span>
+            <span class="risk-text">
+              <strong>Total Risk:</strong> ${{ totalRisk.toFixed(0) }}
+              <span class="risk-warning" v-if="dailyRiskPercentage > 0">
+                ({{ dailyRiskWarningIcon }}
+                {{ dailyRiskPercentage.toFixed(0) }}% of daily limit)
+              </span>
+            </span>
           </div>
-          <div class="summary-item">
-            <span class="label">Target 2 (+2R):</span>
-            <span class="value">${{ calculatedTarget2.toFixed(2) }}</span>
-          </div>
-          <div class="summary-item" v-if="postTaxGain2R.afterTax > 0">
-            <span class="label">Post-Tax Gain @ +2R:</span>
-            <span class="value">
-              {{
-                showRValues
-                  ? postTaxGain2R.afterTaxR.toFixed(2) + "R"
-                  : "$" + postTaxGain2R.afterTax.toFixed(2)
+          <div class="risk-item">
+            <span class="bullet">•</span>
+            <span class="risk-text">
+              <strong>Remaining Daily Risk After Trade:</strong> ${{
+                remainingDailyRiskAfterTrade.toFixed(0)
               }}
-              <small>(Tax: ${{ postTaxGain2R.tax.toFixed(2) }})</small>
             </span>
           </div>
         </div>
       </div>
+
+      <div class="section-divider submit-divider"></div>
 
       <button type="submit" class="submit-btn">Add Trade</button>
     </form>
@@ -244,6 +296,36 @@
 import { ref, computed, watch } from "vue";
 
 const emit = defineEmits(["trade-added"]);
+
+const strategyDropdownOpen = ref(false);
+
+const toggleStrategyDropdown = () => {
+  strategyDropdownOpen.value = !strategyDropdownOpen.value;
+};
+
+const closeStrategyDropdown = () => {
+  strategyDropdownOpen.value = false;
+};
+
+const selectStrategy = (strategy) => {
+  trade.value.strategy = strategy;
+  strategyDropdownOpen.value = false;
+};
+
+// Click outside directive
+const vClickOutside = {
+  mounted(el, binding) {
+    el.clickOutsideEvent = (event) => {
+      if (!(el === event.target || el.contains(event.target))) {
+        binding.value();
+      }
+    };
+    document.addEventListener("click", el.clickOutsideEvent);
+  },
+  unmounted(el) {
+    document.removeEventListener("click", el.clickOutsideEvent);
+  },
+};
 
 const props = defineProps({
   showRValues: {
@@ -266,11 +348,23 @@ const props = defineProps({
     type: Number,
     default: 0,
   },
+  tradingMode: {
+    type: String,
+    default: "SWING",
+  },
+  maxDailyLoss: {
+    type: Number,
+    default: 500,
+  },
+  dailyRiskUsed: {
+    type: Number,
+    default: 0,
+  },
 });
 
 const trade = ref({
   ticker: "",
-  strategy: "",
+  strategy: null,
   shares: 0,
   entryPrice: "",
   stopLoss: "",
@@ -283,6 +377,37 @@ const trade = ref({
   federalTaxRate: props.federalTaxRate,
   marginInterestRate: props.marginInterestRate,
   rSize: props.defaultRSize,
+});
+
+const strategyOptions = computed(() => {
+  if (props.tradingMode === "DAY") {
+    return [
+      "Breakout",
+      "Pullback",
+      "Reversal",
+      "Gap & Go",
+      "VWAP Bounce",
+      "Opening Range Breakout",
+      "Momentum",
+      "Scalp",
+      "Failed Breakout",
+      "Support/Resistance",
+    ];
+  } else {
+    // SWING mode
+    return [
+      "Breakout",
+      "Pullback",
+      "Trend Following",
+      "Reversal",
+      "Support/Resistance",
+      "Moving Average Bounce",
+      "Chart Pattern",
+      "Earnings Play",
+      "News Catalyst",
+      "Sector Rotation",
+    ];
+  }
 });
 
 const rValueDollars = computed(() => {
@@ -302,7 +427,7 @@ const calculatedShares = computed(() => {
 
 const sharesCalculationInfo = computed(() => {
   if (riskPerShare.value === 0) {
-    return "Enter entry and stop prices";
+    return "";
   }
   const rDollars = trade.value.rSize || props.defaultRSize;
   return `${rDollars.toFixed(2)} ÷ ${riskPerShare.value.toFixed(2)} = ${
@@ -350,28 +475,22 @@ const rMultipleTarget2 = computed(() => {
   return profit / riskPerShare.value;
 });
 
-const postTaxGain2R = computed(() => {
-  if (
-    !trade.value.entryPrice ||
-    !calculatedTarget2.value ||
-    riskPerShare.value === 0
-  )
-    return 0;
+const dailyRiskPercentage = computed(() => {
+  if (!props.maxDailyLoss || props.maxDailyLoss === 0) return 0;
+  return (totalRisk.value / props.maxDailyLoss) * 100;
+});
 
-  const profitPerShare = Math.abs(
-    calculatedTarget2.value - trade.value.entryPrice
-  );
-  const totalProfit = profitPerShare * calculatedShares.value;
-  const combinedTaxRate =
-    ((trade.value.stateTaxRate || 0) + (trade.value.federalTaxRate || 0)) / 100;
-  const afterTax = totalProfit * (1 - combinedTaxRate);
+const dailyRiskWarningIcon = computed(() => {
+  const percentage = dailyRiskPercentage.value;
+  if (percentage >= 80) return "🔴";
+  if (percentage >= 50) return "⚠️";
+  return "✅";
+});
 
-  return {
-    preTax: totalProfit,
-    tax: totalProfit * combinedTaxRate,
-    afterTax: afterTax,
-    afterTaxR: afterTax / (trade.value.rSize || props.defaultRSize),
-  };
+const remainingDailyRiskAfterTrade = computed(() => {
+  const remaining =
+    props.maxDailyLoss - (props.dailyRiskUsed + totalRisk.value);
+  return Math.max(0, remaining);
 });
 
 // Auto-update targets when calculation changes
@@ -478,7 +597,7 @@ const submitTrade = () => {
   // Reset form
   trade.value = {
     ticker: "",
-    strategy: "",
+    strategy: null,
     shares: 0,
     entryPrice: "",
     stopLoss: "",
@@ -499,14 +618,14 @@ const submitTrade = () => {
 .trade-form {
   background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
   border-radius: 16px;
-  padding: 20px;
+  padding: 24px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(0, 0, 0, 0.03);
   border: 1px solid rgba(226, 232, 240, 0.8);
   backdrop-filter: blur(10px);
 }
 
 .trade-form h2 {
-  margin: 0 0 20px 0;
+  margin: 0 0 24px 0;
   color: #1e293b;
   font-size: 1.5rem;
   font-weight: 700;
@@ -522,7 +641,47 @@ const submitTrade = () => {
 }
 
 .form-group {
-  margin-bottom: 16px;
+  margin-bottom: 18px;
+}
+
+.section-divider {
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    rgba(226, 232, 240, 0.8) 20%,
+    rgba(226, 232, 240, 0.8) 80%,
+    transparent
+  );
+  margin: 24px 0;
+  position: relative;
+}
+
+.section-divider::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 40%;
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    rgba(148, 163, 184, 0.2),
+    transparent
+  );
+}
+
+.submit-divider {
+  margin: 28px 0 20px 0;
+  background: linear-gradient(
+    to right,
+    transparent,
+    rgba(59, 130, 246, 0.15) 20%,
+    rgba(59, 130, 246, 0.15) 80%,
+    transparent
+  );
 }
 
 .form-row {
@@ -549,7 +708,7 @@ label {
 input[type="number"],
 input[type="text"] {
   width: 100%;
-  padding: 10px 12px;
+  padding: 11px 14px;
   border: 2px solid #e2e8f0;
   border-radius: 8px;
   font-size: 0.9rem;
@@ -592,7 +751,7 @@ input::placeholder {
 
 select {
   width: 100%;
-  padding: 10px 12px;
+  padding: 11px 14px;
   border: 2px solid #e2e8f0;
   border-radius: 8px;
   font-size: 0.9rem;
@@ -609,17 +768,149 @@ select:focus {
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
+/* Custom Select Dropdown */
+.custom-select {
+  position: relative;
+  width: 100%;
+}
+
+.select-trigger {
+  width: 100%;
+  padding: 11px 14px;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  background: #ffffff;
+  color: #1e293b;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  box-sizing: border-box;
+}
+
+.select-trigger:hover {
+  border-color: #cbd5e1;
+}
+
+.select-trigger .placeholder {
+  color: #94a3b8;
+  font-weight: 400;
+}
+
+.dropdown-arrow {
+  color: #64748b;
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.dropdown-arrow.open {
+  transform: rotate(180deg);
+}
+
+.select-options {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 100%;
+  width: max-content;
+  background: #ffffff;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1),
+    0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  max-height: 280px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  z-index: 100;
+  animation: slideDown 0.2s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.select-option {
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.select-option:hover {
+  background: #f8fafc;
+}
+
+.select-option.selected {
+  background: #eff6ff;
+  color: #3b82f6;
+}
+
+.select-option.selected:hover {
+  background: #dbeafe;
+}
+
+.option-text {
+  font-size: 0.9rem;
+  font-weight: 500;
+  flex: 1;
+}
+
+.option-text.placeholder {
+  color: #94a3b8;
+  font-weight: 400;
+}
+
+.check-icon {
+  color: #3b82f6;
+  flex-shrink: 0;
+}
+
+/* Scrollbar styling for dropdown */
+.select-options::-webkit-scrollbar {
+  width: 6px;
+}
+
+.select-options::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 8px;
+}
+
+.select-options::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 8px;
+}
+
+.select-options::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
 textarea {
   width: 100%;
-  padding: 10px 12px;
+  padding: 11px 14px;
   border: 2px solid #e2e8f0;
   border-radius: 8px;
   font-size: 0.9rem;
   font-family: inherit;
   resize: vertical;
-  min-height: 60px;
+  min-height: 70px;
   transition: all 0.2s ease;
   box-sizing: border-box;
+  background: #ffffff;
+  color: #1e293b;
 }
 
 textarea:focus {
@@ -678,70 +969,129 @@ small {
 .trade-summary {
   background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
   border-radius: 12px;
-  padding: 16px;
-  margin: 20px 0;
+  padding: 18px;
+  margin: 0 0 20px 0;
   border: 1px solid #e2e8f0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
 }
 
 .trade-summary h3 {
-  margin: 0 0 12px 0;
+  margin: 0 0 14px 0;
   color: #1e293b;
-  font-size: 1rem;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
-.trade-summary h3::before {
-  content: "📊";
-  font-size: 0.875rem;
-}
-
-.summary-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 16px;
-}
-
-.summary-item {
+.risk-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 10px;
+  margin-bottom: 16px;
 }
 
-.summary-item .label {
-  color: #64748b;
-  font-size: 0.75rem;
-  font-weight: 500;
-  text-transform: none;
-  letter-spacing: normal;
-  margin: 0;
+.risk-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  line-height: 1.5;
 }
 
-.summary-item .value {
+.bullet {
+  color: #3b82f6;
+  font-size: 1.2rem;
+  line-height: 1.3;
+  flex-shrink: 0;
+}
+
+.risk-text {
+  color: #475569;
+  font-size: 0.875rem;
+  flex: 1;
+}
+
+.risk-text strong {
   color: #1e293b;
-  font-size: 0.9rem;
-  font-weight: 700;
+  font-weight: 600;
+}
+
+.risk-warning {
+  color: #64748b;
+  font-size: 0.8rem;
+  margin-left: 4px;
+}
+
+.targets-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.targets-header {
   display: flex;
   align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+  padding: 4px 0;
+  transition: all 0.2s ease;
 }
 
-.summary-item .value small {
+.targets-header:hover {
+  opacity: 0.7;
+}
+
+.targets-header h4 {
+  margin: 0;
+  color: #1e293b;
+  font-size: 0.95rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.toggle-icon {
   color: #64748b;
   font-size: 0.75rem;
-  font-weight: 500;
-  margin: 0;
+  transition: transform 0.2s ease;
 }
 
-.summary-item .value.positive {
-  color: #10b981;
+.targets-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+  animation: slideDown 0.2s ease;
 }
 
-.summary-item .value.negative {
-  color: #ef4444;
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.target-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  line-height: 1.5;
+}
+
+.target-text {
+  color: #475569;
+  font-size: 0.875rem;
+  flex: 1;
+}
+
+.target-text strong {
+  color: #1e293b;
+  font-weight: 600;
 }
 
 .submit-btn {
@@ -749,9 +1099,9 @@ small {
   background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
   color: white;
   border: none;
-  padding: 12px 20px;
-  border-radius: 8px;
-  font-size: 0.9rem;
+  padding: 14px 24px;
+  border-radius: 10px;
+  font-size: 0.95rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -759,7 +1109,8 @@ small {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 8px;
+  letter-spacing: 0.025em;
 }
 
 .submit-btn:hover {
