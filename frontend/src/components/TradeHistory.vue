@@ -107,7 +107,7 @@
               <th>R-Multiple</th>
               <th>Win/Loss</th>
               <th>Tax</th>
-              <th>Margin Int.</th>
+              <th>Int</th>
               <th>Net</th>
             </tr>
           </thead>
@@ -512,19 +512,64 @@ const saveAllChanges = async () => {
   try {
     const updates = Object.keys(editedTrades.value).map(async (tradeId) => {
       const edited = editedTrades.value[tradeId];
+      const originalTrade = props.history.find(
+        (t) => t.id === parseInt(tradeId)
+      );
+
+      if (!originalTrade) return null;
+
+      // Recalculate P&L based on edited values
+      const entryPrice = parseFloat(edited.entryPrice);
+      const exitPrice = parseFloat(edited.exitPrice);
+      const quantity = parseFloat(edited.quantity);
+
+      let profitLoss;
+      if (originalTrade.type.toLowerCase() === "long") {
+        profitLoss = (exitPrice - entryPrice) * quantity;
+      } else {
+        profitLoss = (entryPrice - exitPrice) * quantity;
+      }
+
+      profitLoss = Math.round(profitLoss * 100) / 100;
+
+      // Calculate tax (using original tax rates if available)
+      const stateTaxRate = originalTrade.stateTaxRate || 0;
+      const federalTaxRate = originalTrade.federalTaxRate || 0;
+      const combinedTaxRate = (stateTaxRate + federalTaxRate) / 100;
+      const taxAmount =
+        Math.round((profitLoss > 0 ? profitLoss * combinedTaxRate : 0) * 100) /
+        100;
+
+      // Calculate margin interest
+      const positionSize = originalTrade.positionSize || entryPrice * quantity;
+      const marginRate = (originalTrade.marginInterestRate || 0) / 100;
+      const entryDate = new Date(edited.entryDate);
+      const exitDate = new Date(edited.closeDate);
+      const daysHeld = Math.max(
+        1,
+        Math.ceil((exitDate - entryDate) / (1000 * 60 * 60 * 24))
+      );
+      const marginInterest =
+        Math.round(((positionSize * marginRate) / 360) * daysHeld * 100) / 100;
+
       const updateData = {
         symbol: edited.ticker,
         strategy: edited.strategy,
-        entry_price: edited.entryPrice,
-        exit_price: edited.exitPrice,
-        quantity: edited.quantity,
+        entry_price: entryPrice,
+        exit_price: exitPrice,
+        quantity: quantity,
         entry_time: edited.entryDate,
         exit_time: edited.closeDate,
+        profit_loss: profitLoss,
+        tax_amount: taxAmount,
+        margin_interest: marginInterest,
+        position_size: entryPrice * quantity,
       };
+
       return api.updateTrade(tradeId, updateData);
     });
 
-    await Promise.all(updates);
+    await Promise.all(updates.filter((u) => u !== null));
 
     // Refresh the history
     window.location.reload();
@@ -705,21 +750,66 @@ watch(
 table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
 }
 
 th {
   background: #f8f9fa;
-  padding: 12px 8px;
+  padding: 10px 6px;
   text-align: left;
   font-weight: 600;
   color: #5a6c7d;
   border-bottom: 2px solid #e1e8ed;
+  white-space: nowrap;
 }
 
 td {
-  padding: 10px 8px;
+  padding: 8px 6px;
   border-bottom: 1px solid #e1e8ed;
+}
+
+/* Entry/Exit dates - compact */
+th:nth-child(1),
+th:nth-child(2),
+td:nth-child(1),
+td:nth-child(2) {
+  padding: 8px 3px;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+/* Make date inputs more compact */
+td:nth-child(1) .table-edit-input,
+td:nth-child(2) .table-edit-input {
+  font-size: 0.7rem;
+  max-width: 115px;
+}
+
+/* Ticker - compact */
+th:nth-child(3),
+td:nth-child(3) {
+  padding: 8px 4px;
+}
+
+/* Type - compact */
+th:nth-child(5),
+td:nth-child(5) {
+  padding: 8px 4px;
+}
+
+/* Win/Loss - compact */
+th:nth-child(12),
+td:nth-child(12) {
+  padding: 8px 4px;
+}
+
+/* Tax and Margin Interest - compact */
+th:nth-child(13),
+th:nth-child(14),
+td:nth-child(13),
+td:nth-child(14) {
+  padding: 8px 4px;
+  font-size: 0.8rem;
 }
 
 tr.profitable {

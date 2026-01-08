@@ -159,8 +159,9 @@
                     type="number"
                     step="0.01"
                     min="0.01"
-                    class="inline-edit-input"
+                    class="inline-edit-input readonly-input"
                     placeholder="Position Size"
+                    readonly
                   />
                 </div>
                 <div class="detail-item">
@@ -449,7 +450,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from "vue";
+import { ref, computed, watch } from "vue";
 import apiService from "../services/api";
 import Toast from "./Toast.vue";
 
@@ -585,6 +586,16 @@ const startEditTrade = (trade) => {
     expandedTradeId.value = trade.id;
   }
 };
+
+// Watch for changes to shares or entryPrice and recalculate position_size
+watch(
+  () => [editForm.value.shares, editForm.value.entryPrice],
+  ([shares, entryPrice]) => {
+    if (shares && entryPrice && editingTradeId.value !== null) {
+      editForm.value.position_size = shares * entryPrice;
+    }
+  }
+);
 
 const cancelEdit = () => {
   editingTradeId.value = null;
@@ -951,7 +962,7 @@ const confirmCloseTrade = async (trade) => {
 .pnl-info,
 .r-multiple {
   display: flex;
-  justify-content: space-between;
+  gap: 8px;
   align-items: center;
 }
 
@@ -1228,6 +1239,17 @@ const confirmCloseTrade = async (trade) => {
 .inline-edit-textarea:focus {
   border-color: #3498db;
   background: rgba(52, 152, 219, 0.08);
+}
+
+.readonly-input {
+  cursor: not-allowed;
+  background: #f8f9fa !important;
+  color: #7f8c8d !important;
+}
+
+.readonly-input:hover {
+  border-bottom-color: transparent !important;
+  background: #f8f9fa !important;
 }
 
 .detail-item .inline-edit-input {

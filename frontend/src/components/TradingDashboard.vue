@@ -618,11 +618,9 @@ const handleTradeClosed = async () => {
   await loadRiskSettings();
 };
 
-const handleTradeUpdated = (updatedTrade) => {
-  const index = activeTrades.value.findIndex((t) => t.id === updatedTrade.id);
-  if (index !== -1) {
-    activeTrades.value[index] = { ...updatedTrade };
-  }
+const handleTradeUpdated = async (updatedTrade) => {
+  // Refetch all active trades to ensure we have current_price and all fields
+  await loadActiveTrades();
 };
 
 const handleRiskSettingsUpdated = (settings) => {
@@ -1115,7 +1113,7 @@ const handleSettingsSave = async (settings) => {
 
 /* Main Content */
 .dashboard-main {
-  max-width: 1400px;
+  max-width: 1600px;
   margin: 0 auto;
   display: grid;
   grid-template-columns: 1fr 2fr;

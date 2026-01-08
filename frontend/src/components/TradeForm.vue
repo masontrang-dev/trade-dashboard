@@ -133,7 +133,6 @@
               step="1"
               min="1"
               placeholder="Auto-calculated"
-              readonly
             />
             <small class="calculation-info">
               {{ sharesCalculationInfo }}
