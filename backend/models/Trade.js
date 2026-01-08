@@ -153,7 +153,12 @@ class Trade {
             trade.position_size || trade.entry_price * trade.quantity;
           const marginRate = (trade.margin_interest_rate || 0) / 100;
           const entryDate = new Date(trade.entry_time);
-          const exitDate = new Date();
+
+          // Use custom close date if provided, otherwise use current time
+          const exitDate = additionalData.closeDate
+            ? new Date(additionalData.closeDate)
+            : new Date();
+
           const daysHeld = Math.max(
             1,
             Math.ceil((exitDate - entryDate) / (1000 * 60 * 60 * 24))
@@ -163,6 +168,10 @@ class Trade {
           const netProfit = pnl - taxAmount - marginInterest;
 
           const now = new Date().toISOString();
+          const exitTime = additionalData.closeDate
+            ? new Date(additionalData.closeDate).toISOString()
+            : now;
+
           const sql = `
           UPDATE trades 
           SET 
@@ -178,7 +187,7 @@ class Trade {
 
           db.run(
             sql,
-            [exitPrice, pnl, taxAmount, marginInterest, now, now, id],
+            [exitPrice, pnl, taxAmount, marginInterest, exitTime, now, id],
             function (err) {
               if (err) {
                 reject(err);

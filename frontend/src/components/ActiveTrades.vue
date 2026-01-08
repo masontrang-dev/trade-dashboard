@@ -14,6 +14,7 @@
         :class="{
           profitable: currentPnL(trade) > 0,
           losing: currentPnL(trade) < 0,
+          closing: closingTradeId === trade.id,
         }"
       >
         <div class="trade-header">
@@ -22,33 +23,32 @@
             <span class="trade-type" :class="trade.type">{{
               trade.type ? trade.type.toUpperCase() : ""
             }}</span>
+            <span class="strategy-badge" v-if="trade.strategy">{{
+              trade.strategy
+            }}</span>
+            <span class="entry-date">{{ formatDate(trade.entry_time) }}</span>
           </div>
           <div class="trade-actions">
+            <button
+              @click="toggleDetails(trade.id)"
+              class="details-btn"
+              title="Toggle Details"
+            >
+              {{ expandedTradeId === trade.id ? "▼" : "▶" }}
+            </button>
             <button @click="editTrade(trade)" class="edit-btn">Edit</button>
-            <button @click="closeTrade(trade)" class="close-btn">Close</button>
+            <button
+              @click="toggleCloseTrade(trade)"
+              class="close-btn"
+              :class="{ active: closingTradeId === trade.id }"
+            >
+              {{ closingTradeId === trade.id ? "Cancel" : "Close" }}
+            </button>
           </div>
         </div>
 
         <div class="trade-details">
-          <div class="detail-row">
-            <div class="detail-item">
-              <span class="label">Entry Date:</span>
-              <span class="value">
-                {{ formatDate(trade.entry_time) }}
-              </span>
-            </div>
-            <div class="detail-item">
-              <span class="label">Strategy:</span>
-              <span class="value">
-                {{ trade.strategy || "N/A" }}
-              </span>
-            </div>
-            <div class="detail-item">
-              <span class="label">Shares:</span>
-              <span class="value">{{ trade.shares }}</span>
-            </div>
-          </div>
-
+          <!-- Essential Info - Always Visible -->
           <div class="detail-row">
             <div class="detail-item">
               <span class="label">Entry:</span>
@@ -78,43 +78,65 @@
             </div>
           </div>
 
-          <div class="detail-row">
-            <div class="detail-item">
-              <span class="label">Position Size:</span>
-              <span class="value">
-                ${{ (trade.entryPrice * trade.shares).toFixed(2) }}
-              </span>
-            </div>
-            <div class="detail-item">
-              <span class="label">Risk:</span>
-              <span class="value">
-                <template v-if="showRValues">
-                  {{ (trade.riskAmount ? riskAmountR(trade) : 0).toFixed(2) }}R
-                  <small
-                    >({{
-                      trade.riskAmount
-                        ? `$${trade.riskAmount.toFixed(2)}`
-                        : "$0.00"
-                    }})</small
-                  >
-                </template>
-                <template v-else>
-                  ${{ trade.riskAmount ? trade.riskAmount.toFixed(2) : "0.00" }}
-                </template>
-              </span>
-            </div>
-          </div>
+          <!-- Collapsible Details Section -->
+          <transition name="expand">
+            <div v-if="expandedTradeId === trade.id" class="expanded-details">
+              <div class="detail-row">
+                <div class="detail-item">
+                  <span class="label">Shares:</span>
+                  <span class="value">{{ trade.shares }}</span>
+                </div>
+                <div class="detail-item">
+                  <span class="label">Position Size:</span>
+                  <span class="value">
+                    ${{ (trade.entryPrice * trade.shares).toFixed(2) }}
+                  </span>
+                </div>
+                <div class="detail-item">
+                  <span class="label">Risk:</span>
+                  <span class="value">
+                    <template v-if="showRValues">
+                      {{
+                        (trade.riskAmount ? riskAmountR(trade) : 0).toFixed(2)
+                      }}R
+                      <small
+                        >({{
+                          trade.riskAmount
+                            ? `$${trade.riskAmount.toFixed(2)}`
+                            : "$0.00"
+                        }})</small
+                      >
+                    </template>
+                    <template v-else>
+                      ${{
+                        trade.riskAmount ? trade.riskAmount.toFixed(2) : "0.00"
+                      }}
+                    </template>
+                  </span>
+                </div>
+              </div>
 
-          <div class="detail-row">
-            <div class="detail-item">
-              <span class="label">Target 1:</span>
-              <span class="value">${{ trade.target1?.toFixed(2) || "-" }}</span>
+              <div class="detail-row">
+                <div class="detail-item">
+                  <span class="label">Target 1:</span>
+                  <span class="value"
+                    >${{ trade.target1?.toFixed(2) || "-" }}</span
+                  >
+                </div>
+                <div class="detail-item">
+                  <span class="label">Target 2:</span>
+                  <span class="value"
+                    >${{ trade.target2?.toFixed(2) || "-" }}</span
+                  >
+                </div>
+              </div>
+
+              <div v-if="trade.notes" class="trade-notes">
+                <span class="label">Notes:</span>
+                <p>{{ trade.notes }}</p>
+              </div>
             </div>
-            <div class="detail-item">
-              <span class="label">Target 2:</span>
-              <span class="value">${{ trade.target2?.toFixed(2) || "-" }}</span>
-            </div>
-          </div>
+          </transition>
 
           <div class="current-status">
             <div class="pnl-info">
@@ -203,9 +225,85 @@
             </div>
           </div>
 
-          <div v-if="trade.notes" class="trade-notes">
-            <p>{{ trade.notes }}</p>
-          </div>
+          <!-- Close Trade Fields - Animated inline -->
+          <transition name="slide-fade">
+            <div
+              v-if="closingTradeId === trade.id"
+              class="close-fields-section"
+            >
+              <div class="detail-row">
+                <div class="detail-item close-field">
+                  <span class="label">Exit Price *</span>
+                  <input
+                    v-model.number="closeForm.exitPrice"
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    class="close-input"
+                    placeholder="Enter exit price"
+                  />
+                </div>
+                <div class="detail-item close-field">
+                  <span class="label">Close Date *</span>
+                  <input
+                    v-model="closeForm.closeDate"
+                    type="datetime-local"
+                    class="close-input"
+                  />
+                </div>
+                <div class="detail-item">
+                  <span class="label">Days Held:</span>
+                  <span class="value">{{ calculateDaysHeld(trade) }}</span>
+                </div>
+              </div>
+
+              <!-- Projected P&L Row -->
+              <div v-if="closeForm.exitPrice" class="detail-row projected-row">
+                <div class="detail-item">
+                  <span class="label">Projected P&L:</span>
+                  <span
+                    class="value"
+                    :class="{
+                      'text-green': calculateClosePnL(trade) > 0,
+                      'text-red': calculateClosePnL(trade) < 0,
+                    }"
+                  >
+                    {{ calculateClosePnL(trade) > 0 ? "+" : "" }}${{
+                      calculateClosePnL(trade).toFixed(2)
+                    }}
+                    <small
+                      >({{ calculateClosePnLPercent(trade) > 0 ? "+" : ""
+                      }}{{
+                        calculateClosePnLPercent(trade).toFixed(2)
+                      }}%)</small
+                    >
+                  </span>
+                </div>
+                <div class="detail-item">
+                  <span class="label">Projected R:</span>
+                  <span
+                    class="value"
+                    :class="{
+                      'text-green': calculateCloseRMultiple(trade) > 0,
+                      'text-red': calculateCloseRMultiple(trade) < 0,
+                    }"
+                  >
+                    {{ calculateCloseRMultiple(trade) > 0 ? "+" : ""
+                    }}{{ calculateCloseRMultiple(trade).toFixed(2) }}R
+                  </span>
+                </div>
+                <div class="detail-item">
+                  <button
+                    @click="confirmCloseTrade(trade)"
+                    class="confirm-close-btn"
+                    :disabled="!closeForm.exitPrice || !closeForm.closeDate"
+                  >
+                    Confirm Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          </transition>
         </div>
       </div>
     </div>
@@ -379,11 +477,17 @@ const props = defineProps({
 const emit = defineEmits(["trade-closed", "trade-updated"]);
 
 const editingTrade = ref(null);
+const closingTradeId = ref(null);
+const expandedTradeId = ref(null);
+const closeForm = ref({
+  exitPrice: null,
+  closeDate: null,
+});
 
 const currentPnL = computed(() => (trade) => {
   if (!trade?.current_price) return 0;
   const priceDiff =
-    trade.type === "long"
+    trade.type.toLowerCase() === "long"
       ? trade.current_price - trade.entryPrice
       : trade.entryPrice - trade.current_price;
   return priceDiff * trade.shares;
@@ -468,20 +572,89 @@ const formatDate = (dateString) => {
   });
 };
 
-const closeTrade = async (trade) => {
-  const exitPrice = parseFloat(
-    prompt(
-      `Enter exit price for ${trade.symbol}:`,
-      trade.current_price || trade.entry_price
-    )
-  );
+const toggleDetails = (tradeId) => {
+  expandedTradeId.value = expandedTradeId.value === tradeId ? null : tradeId;
+};
 
-  if (!exitPrice || isNaN(exitPrice)) {
-    return; // User cancelled or entered invalid price
+const toggleCloseTrade = (trade) => {
+  if (closingTradeId.value === trade.id) {
+    // Cancel closing
+    closingTradeId.value = null;
+    closeForm.value = {
+      exitPrice: null,
+      closeDate: null,
+    };
+  } else {
+    // Start closing
+    closingTradeId.value = trade.id;
+    // Pre-populate with current price and current date/time
+    closeForm.value = {
+      exitPrice: trade.current_price || trade.entryPrice,
+      closeDate: formatDateTimeLocal(new Date()),
+    };
   }
+};
+
+const calculateDaysHeld = (trade) => {
+  if (!trade.entry_time) return 0;
+  const entryDate = new Date(trade.entry_time);
+  const closeDate = closeForm.value.closeDate
+    ? new Date(closeForm.value.closeDate)
+    : new Date();
+  const diffTime = Math.abs(closeDate - entryDate);
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  return diffDays;
+};
+
+const calculateClosePnL = (trade) => {
+  if (!closeForm.value.exitPrice) return 0;
+  const priceDiff =
+    trade.type.toLowerCase() === "long"
+      ? closeForm.value.exitPrice - trade.entryPrice
+      : trade.entryPrice - closeForm.value.exitPrice;
+  return priceDiff * trade.shares;
+};
+
+const calculateClosePnLPercent = (trade) => {
+  if (!closeForm.value.exitPrice) return 0;
+  const positionSize = trade.entryPrice * trade.shares;
+  if (positionSize === 0) return 0;
+  return (calculateClosePnL(trade) / positionSize) * 100;
+};
+
+const calculateCloseRMultiple = (trade) => {
+  if (!trade.riskAmount || trade.riskAmount === 0) return 0;
+  return calculateClosePnL(trade) / trade.riskAmount;
+};
+
+const formatDateTimeLocal = (date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+};
+
+const confirmCloseTrade = async (trade) => {
+  if (!closeForm.value.exitPrice || !closeForm.value.closeDate) {
+    alert("Please enter both exit price and close date");
+    return;
+  }
+
   try {
-    await apiService.closeTrade(trade.id, exitPrice);
-    emit("trade-closed"); // Notify parent to refresh the trades list
+    await apiService.closeTrade(trade.id, closeForm.value.exitPrice, {
+      closeDate: closeForm.value.closeDate,
+    });
+
+    // Reset form
+    closingTradeId.value = null;
+    closeForm.value = {
+      exitPrice: null,
+      closeDate: null,
+    };
+
+    emit("trade-closed");
     alert(`Trade closed successfully!`);
   } catch (error) {
     console.error("Error closing trade:", error);
@@ -537,6 +710,11 @@ const closeTrade = async (trade) => {
   border-color: #e74c3c;
 }
 
+.trade-card.closing {
+  border-color: #f39c12;
+  box-shadow: 0 4px 12px rgba(243, 156, 18, 0.2);
+}
+
 .trade-header {
   display: flex;
   justify-content: space-between;
@@ -548,12 +726,31 @@ const closeTrade = async (trade) => {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
 .ticker-info h3 {
   margin: 0;
   color: #2c3e50;
   font-size: 1.3rem;
+}
+
+.strategy-badge {
+  padding: 3px 8px;
+  background: #ecf0f1;
+  color: #5a6c7d;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.entry-date {
+  padding: 3px 8px;
+  background: #e8f4f8;
+  color: #3498db;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
 }
 
 .trade-type {
@@ -577,6 +774,24 @@ const closeTrade = async (trade) => {
 .trade-actions {
   display: flex;
   gap: 8px;
+}
+
+.details-btn {
+  padding: 6px 10px;
+  border: 2px solid #e1e8ed;
+  background: white;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: #5a6c7d;
+  font-weight: bold;
+}
+
+.details-btn:hover {
+  background: #f8f9fa;
+  border-color: #3498db;
+  color: #3498db;
 }
 
 .edit-btn,
@@ -605,6 +820,14 @@ const closeTrade = async (trade) => {
 
 .close-btn:hover {
   background: #c0392b;
+}
+
+.close-btn.active {
+  background: #f39c12;
+}
+
+.close-btn.active:hover {
+  background: #e67e22;
 }
 
 .trade-details {
@@ -730,11 +953,26 @@ const closeTrade = async (trade) => {
   text-align: right;
 }
 
+.expanded-details {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 2px solid #e1e8ed;
+}
+
 .trade-notes {
+  margin-top: 12px;
   padding: 10px;
   background: #f8f9fa;
   border-radius: 6px;
   border-left: 3px solid #3498db;
+}
+
+.trade-notes .label {
+  font-size: 0.8rem;
+  color: #5a6c7d;
+  font-weight: 600;
+  display: block;
+  margin-bottom: 5px;
 }
 
 .trade-notes p {
@@ -742,6 +980,27 @@ const closeTrade = async (trade) => {
   color: #5a6c7d;
   font-size: 0.9rem;
   font-style: italic;
+}
+
+/* Expand Animation */
+.expand-enter-active,
+.expand-leave-active {
+  transition: all 0.3s ease;
+  overflow: hidden;
+}
+
+.expand-enter-from,
+.expand-leave-to {
+  max-height: 0;
+  opacity: 0;
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.expand-enter-to,
+.expand-leave-from {
+  max-height: 500px;
+  opacity: 1;
 }
 
 /* Modal Styles */
@@ -836,6 +1095,99 @@ const closeTrade = async (trade) => {
   margin-bottom: 15px;
 }
 
+/* Close Trade Inline Fields */
+.close-fields-section {
+  margin-top: 15px;
+  padding: 15px;
+  background: linear-gradient(135deg, #fff5e6 0%, #ffe8cc 100%);
+  border: 2px solid #f39c12;
+  border-radius: 8px;
+}
+
+.close-field {
+  display: flex;
+  flex-direction: column;
+}
+
+.close-input {
+  padding: 8px 10px;
+  border: 2px solid #e1e8ed;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #2c3e50;
+  transition: border-color 0.2s ease;
+  background: white;
+}
+
+.close-input:focus {
+  outline: none;
+  border-color: #f39c12;
+  box-shadow: 0 0 0 3px rgba(243, 156, 18, 0.1);
+}
+
+.projected-row {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 2px solid rgba(243, 156, 18, 0.3);
+}
+
+.projected-row .value small {
+  display: inline-block;
+  font-size: 0.8rem;
+  margin-left: 4px;
+}
+
+.text-green {
+  color: #27ae60 !important;
+}
+
+.text-red {
+  color: #e74c3c !important;
+}
+
+.confirm-close-btn {
+  padding: 8px 20px;
+  background: #27ae60;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  margin-top: 4px;
+}
+
+.confirm-close-btn:hover:not(:disabled) {
+  background: #229954;
+}
+
+.confirm-close-btn:disabled {
+  background: #95a5a6;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Slide Fade Animation */
+.slide-fade-enter-active {
+  transition: all 0.3s ease-out;
+}
+
+.slide-fade-leave-active {
+  transition: all 0.2s cubic-bezier(1, 0.5, 0.8, 1);
+}
+
+.slide-fade-enter-from {
+  transform: translateY(-10px);
+  opacity: 0;
+}
+
+.slide-fade-leave-to {
+  transform: translateY(-10px);
+  opacity: 0;
+}
+
 @media (max-width: 768px) {
   .form-row {
     grid-template-columns: 1fr;
@@ -852,6 +1204,14 @@ const closeTrade = async (trade) => {
 
   .progress-item {
     grid-template-columns: 50px 1fr 35px;
+  }
+
+  .close-fields-section .detail-row {
+    grid-template-columns: 1fr;
+  }
+
+  .projected-row .detail-item:last-child {
+    grid-column: 1;
   }
 }
 </style>

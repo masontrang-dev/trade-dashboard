@@ -199,7 +199,7 @@ router.put("/:id", async (req, res) => {
 // Close a trade with exit price
 router.post("/:id/close", async (req, res) => {
   try {
-    const { exitPrice, tax_amount, margin_interest } = req.body;
+    const { exitPrice, tax_amount, margin_interest, closeDate } = req.body;
 
     if (exitPrice === undefined || exitPrice === null) {
       return res.status(400).json({ error: "Exit price is required" });
@@ -214,6 +214,7 @@ router.post("/:id/close", async (req, res) => {
       margin_interest: margin_interest
         ? parseFloat(margin_interest)
         : undefined,
+      closeDate: closeDate || undefined,
     };
 
     const result = await Trade.close(

@@ -79,10 +79,10 @@ class ApiService {
     });
   }
 
-  async closeTrade(id, exitPrice) {
+  async closeTrade(id, exitPrice, additionalData = {}) {
     return this.request(`/trades/${id}/close`, {
       method: "POST",
-      body: JSON.stringify({ exitPrice }),
+      body: JSON.stringify({ exitPrice, ...additionalData }),
     });
   }
 
