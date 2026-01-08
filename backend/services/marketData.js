@@ -8,11 +8,34 @@ const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute in milliseconds
 class MarketDataService {
   constructor() {
     this.cache = new Map();
-    this.cacheTTL = 60000; // Cache prices for 1 minute
+    this.cacheTTL = 60000; // Cache prices for 1 minute during market hours
+    this.afterHoursCacheTTL = 3600000; // Cache for 1 hour outside market hours
     this.requestQueue = [];
     this.requestCount = 0;
     this.lastRequestTime = 0;
     this.isProcessingQueue = false;
+  }
+
+  isMarketOpen() {
+    const now = new Date();
+    const et = new Date(
+      now.toLocaleString("en-US", { timeZone: "America/New_York" })
+    );
+    const day = et.getDay(); // 0 = Sunday, 6 = Saturday
+    const hours = et.getHours();
+    const minutes = et.getMinutes();
+    const totalMinutes = hours * 60 + minutes;
+
+    // Market closed on weekends
+    if (day === 0 || day === 6) {
+      return false;
+    }
+
+    // Market hours: 9:30 AM - 4:00 PM ET (570 minutes - 960 minutes)
+    const marketOpen = 9 * 60 + 30; // 9:30 AM
+    const marketClose = 16 * 60; // 4:00 PM
+
+    return totalMinutes >= marketOpen && totalMinutes < marketClose;
   }
 
   async processRequestQueue() {
@@ -64,9 +87,17 @@ class MarketDataService {
   async _fetchStockPrice(symbol) {
     const now = Date.now();
     const cached = this.cache.get(symbol);
+    const marketOpen = this.isMarketOpen();
+    const cacheTTL = marketOpen ? this.cacheTTL : this.afterHoursCacheTTL;
 
     // Return cached price if it's still valid
-    if (cached && now - cached.timestamp < this.cacheTTL) {
+    if (cached && now - cached.timestamp < cacheTTL) {
+      return cached.price;
+    }
+
+    // If market is closed and we have any cached price, use it
+    if (!marketOpen && cached) {
+      console.log(`Market closed - using cached price for ${symbol}`);
       return cached.price;
     }
 
@@ -110,6 +141,20 @@ class MarketDataService {
   }
 
   async getStockPrice(symbol) {
+    // Check if market is open
+    if (!this.isMarketOpen()) {
+      // Try to return cached price
+      const cached = this.cache.get(symbol);
+      if (cached) {
+        console.log(`Market closed - returning cached price for ${symbol}`);
+        return cached.price;
+      }
+      // If no cache, still fetch but with extended cache
+      console.log(
+        `Market closed - fetching price for ${symbol} (will cache for 1 hour)`
+      );
+    }
+
     return new Promise((resolve, reject) => {
       this.requestQueue.push({ symbol, resolve, reject });
       this.processRequestQueue();

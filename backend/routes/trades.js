@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const Trade = require("../models/Trade");
 const marketData = require("../services/marketData");
+const { getDb, switchDatabase, isDevMode } = require("../models/database");
 
 router.get("/", async (req, res) => {
   try {
@@ -257,6 +258,118 @@ router.delete("/:id", async (req, res) => {
     res.json({ message: "Trade deleted successfully" });
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// Switch trading mode (DAY/SWING)
+router.post("/switch-mode", async (req, res) => {
+  try {
+    const { mode, devMode } = req.body;
+
+    if (!mode || !["DAY", "SWING"].includes(mode)) {
+      return res
+        .status(400)
+        .json({ error: "Invalid mode. Must be DAY or SWING" });
+    }
+
+    const db = getDb();
+
+    // Update trading mode in app_settings
+    await new Promise((resolve, reject) => {
+      db.run(
+        "UPDATE app_settings SET trading_mode = ?, updated_at = ? WHERE id = 1",
+        [mode, new Date().toISOString()],
+        (err) => {
+          if (err) reject(err);
+          else resolve();
+        }
+      );
+    });
+
+    // Get all open trades to re-evaluate
+    const openTrades = await Trade.getOpenPositions();
+
+    console.log(
+      `Switched to ${mode} mode. ${openTrades.length} open trades to re-evaluate.`
+    );
+
+    res.json({
+      message: `Successfully switched to ${mode} mode`,
+      mode,
+      devMode: isDevMode(),
+      openTradesCount: openTrades.length,
+    });
+  } catch (error) {
+    console.error("Error switching trading mode:", error);
+    res.status(500).json({
+      error: "Failed to switch trading mode",
+      details: error.message,
+    });
+  }
+});
+
+// Switch dev mode
+router.post("/switch-dev-mode", async (req, res) => {
+  try {
+    const { devMode } = req.body;
+
+    if (typeof devMode !== "boolean") {
+      return res.status(400).json({ error: "devMode must be a boolean" });
+    }
+
+    // Switch database
+    await switchDatabase(devMode);
+
+    // Update dev_mode in app_settings
+    const db = getDb();
+    await new Promise((resolve, reject) => {
+      db.run(
+        "UPDATE app_settings SET dev_mode = ?, updated_at = ? WHERE id = 1",
+        [devMode ? 1 : 0, new Date().toISOString()],
+        (err) => {
+          if (err) reject(err);
+          else resolve();
+        }
+      );
+    });
+
+    const modeLabel = devMode ? "DEVELOPMENT" : "PRODUCTION";
+    console.log(`Switched to ${modeLabel} mode`);
+
+    res.json({
+      message: `Successfully switched to ${modeLabel} mode`,
+      devMode,
+    });
+  } catch (error) {
+    console.error("Error switching dev mode:", error);
+    res.status(500).json({
+      error: "Failed to switch dev mode",
+      details: error.message,
+    });
+  }
+});
+
+// Get current mode settings
+router.get("/mode-settings", async (req, res) => {
+  try {
+    const db = getDb();
+    const settings = await new Promise((resolve, reject) => {
+      db.get("SELECT * FROM app_settings WHERE id = 1", (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
+      });
+    });
+
+    res.json({
+      tradingMode: settings?.trading_mode || "SWING",
+      devMode: isDevMode(),
+    });
+  } catch (error) {
+    console.error("Error getting mode settings:", error);
+    res.status(500).json({
+      error: "Failed to get mode settings",
+      details: error.message,
+    });
   }
 });
 

@@ -1,8 +1,9 @@
-const db = require("./database");
+const { getDb } = require("./database");
 
 class Trade {
   static async getAll() {
     return new Promise((resolve, reject) => {
+      const db = getDb();
       db.all("SELECT * FROM trades ORDER BY entry_time DESC", (err, rows) => {
         if (err) {
           reject(err);
@@ -15,6 +16,7 @@ class Trade {
 
   static async getById(id) {
     return new Promise((resolve, reject) => {
+      const db = getDb();
       db.get("SELECT * FROM trades WHERE id = ?", [id], (err, row) => {
         if (err) {
           reject(err);
@@ -27,6 +29,7 @@ class Trade {
 
   static async create(tradeData) {
     return new Promise((resolve, reject) => {
+      const db = getDb();
       // Set default values and validate
       const tradeType = (tradeData.type || "LONG").toUpperCase();
       if (tradeType !== "LONG" && tradeType !== "SHORT") {
@@ -83,6 +86,7 @@ class Trade {
 
   static async update(id, tradeData) {
     return new Promise((resolve, reject) => {
+      const db = getDb();
       const fields = [];
       const values = [];
 
@@ -122,6 +126,7 @@ class Trade {
 
   static async delete(id) {
     return new Promise((resolve, reject) => {
+      const db = getDb();
       db.run("DELETE FROM trades WHERE id = ?", [id], function (err) {
         if (err) {
           reject(err);
@@ -134,6 +139,7 @@ class Trade {
 
   static async close(id, exitPrice, additionalData = {}) {
     return new Promise((resolve, reject) => {
+      const db = getDb();
       this.getById(id)
         .then((trade) => {
           if (!trade) {
@@ -256,6 +262,7 @@ class Trade {
 
   static async getOpenPositions() {
     return new Promise((resolve, reject) => {
+      const db = getDb();
       console.log("Fetching open positions from database...");
       db.all(
         'SELECT * FROM trades WHERE status = "OPEN" ORDER BY entry_time DESC',
@@ -273,6 +280,7 @@ class Trade {
 
   static async getClosedTrades() {
     return new Promise((resolve, reject) => {
+      const db = getDb();
       console.log("Fetching closed trades from database...");
       db.all(
         'SELECT * FROM trades WHERE status = "CLOSED" ORDER BY exit_time DESC',

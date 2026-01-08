@@ -2,8 +2,17 @@
   <div class="dashboard">
     <header class="dashboard-header">
       <div class="header-top">
-        <h1>Swing Trading Dashboard</h1>
-        <RToggle @toggle-changed="handleRToggle" />
+        <h1>{{ tradingMode === "DAY" ? "Day" : "Swing" }} Trading Dashboard</h1>
+        <div class="header-controls">
+          <ModeSelector
+            :trading-mode="tradingMode"
+            :dev-mode="devMode"
+            :open-trades-count="activeTrades.length"
+            @trading-mode-changed="handleTradingModeChange"
+            @dev-mode-changed="handleDevModeChange"
+          />
+          <RToggle @toggle-changed="handleRToggle" />
+        </div>
       </div>
       <div class="risk-summary">
         <div class="risk-card">
@@ -105,12 +114,15 @@ import RiskSettings from "./RiskSettings.vue";
 import ActiveTrades from "./ActiveTrades.vue";
 import TradeHistory from "./TradeHistory.vue";
 import RToggle from "./RToggle.vue";
+import ModeSelector from "./ModeSelector.vue";
 import api from "../services/api";
 
 const maxDailyLoss = ref(500);
 const maxOpenRisk = ref(2000);
 const activeTrades = ref([]);
 const tradeHistory = ref([]);
+const tradingMode = ref("SWING");
+const devMode = ref(false);
 
 // Load closed trades from API
 const loadClosedTrades = async () => {
@@ -262,6 +274,33 @@ const loadRiskSettings = async () => {
   const savedToggle = localStorage.getItem("rToggleState");
   if (savedToggle) {
     showRValues.value = JSON.parse(savedToggle);
+  }
+
+  // Load trading mode and dev mode from backend
+  try {
+    const modeSettings = await api.getModeSettings();
+    if (modeSettings) {
+      if (modeSettings.tradingMode) {
+        tradingMode.value = modeSettings.tradingMode;
+        localStorage.setItem("tradingMode", modeSettings.tradingMode);
+      }
+      if (modeSettings.devMode !== undefined) {
+        devMode.value = modeSettings.devMode;
+        localStorage.setItem("devMode", JSON.stringify(modeSettings.devMode));
+      }
+    }
+  } catch (error) {
+    console.error("Failed to load mode settings from backend:", error);
+    // Fallback to localStorage
+    const savedTradingMode = localStorage.getItem("tradingMode");
+    if (savedTradingMode && ["DAY", "SWING"].includes(savedTradingMode)) {
+      tradingMode.value = savedTradingMode;
+    }
+
+    const savedDevMode = localStorage.getItem("devMode");
+    if (savedDevMode) {
+      devMode.value = JSON.parse(savedDevMode);
+    }
   }
 };
 
@@ -417,6 +456,38 @@ const handleRToggle = (showR) => {
   // Save toggle state to localStorage
   localStorage.setItem("rToggleState", JSON.stringify(showR));
 };
+
+const handleTradingModeChange = async (newMode) => {
+  try {
+    // Call API to switch mode and re-evaluate trades
+    await api.switchTradingMode(newMode, devMode.value);
+
+    tradingMode.value = newMode;
+    localStorage.setItem("tradingMode", newMode);
+
+    // Reload trades after mode change
+    await Promise.all([loadActiveTrades(), loadClosedTrades()]);
+  } catch (error) {
+    console.error("Error switching trading mode:", error);
+    alert("Failed to switch trading mode. Please try again.");
+  }
+};
+
+const handleDevModeChange = async (isDevMode) => {
+  try {
+    // Call API to switch dev mode
+    await api.switchDevMode(isDevMode);
+
+    devMode.value = isDevMode;
+    localStorage.setItem("devMode", JSON.stringify(isDevMode));
+
+    // Reload trades from the appropriate database
+    await Promise.all([loadActiveTrades(), loadClosedTrades()]);
+  } catch (error) {
+    console.error("Error switching dev mode:", error);
+    alert("Failed to switch dev mode. Please try again.");
+  }
+};
 </script>
 
 <style scoped>
@@ -435,6 +506,13 @@ const handleRToggle = (showR) => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
+  gap: 20px;
+}
+
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 15px;
 }
 
 .dashboard-header h1 {

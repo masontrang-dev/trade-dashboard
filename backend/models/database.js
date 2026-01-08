@@ -1,16 +1,60 @@
 const sqlite3 = require("sqlite3").verbose();
 const path = require("path");
 
-const dbPath = path.join(__dirname, "../database/trades.db");
+// Global state for current mode
+let currentDevMode = false;
 
-const db = new sqlite3.Database(dbPath, (err) => {
+// Database paths
+const prodDbPath = path.join(__dirname, "../database/trades.db");
+const devDbPath = path.join(__dirname, "../database/trades_dev.db");
+
+// Initialize with production database
+let db = new sqlite3.Database(prodDbPath, (err) => {
   if (err) {
     console.error("Error opening database:", err.message);
   } else {
-    console.log("Connected to SQLite database");
+    console.log("Connected to SQLite database (PRODUCTION)");
   }
 });
 
+// Function to switch database
+const switchDatabase = (devMode) => {
+  return new Promise((resolve, reject) => {
+    const newDbPath = devMode ? devDbPath : prodDbPath;
+    const modeLabel = devMode ? "DEVELOPMENT" : "PRODUCTION";
+
+    // Close current database
+    db.close((err) => {
+      if (err) {
+        console.error("Error closing database:", err.message);
+        return reject(err);
+      }
+
+      // Open new database
+      db = new sqlite3.Database(newDbPath, (err) => {
+        if (err) {
+          console.error("Error opening database:", err.message);
+          return reject(err);
+        }
+
+        currentDevMode = devMode;
+        console.log(`Switched to ${modeLabel} database`);
+
+        // Initialize schema for new database
+        initializeSchema();
+        resolve();
+      });
+    });
+  });
+};
+
+// Get current database instance
+const getDb = () => db;
+
+// Get current dev mode state
+const isDevMode = () => currentDevMode;
+
+// Initialize schema on startup
 db.serialize(() => {
   db.run(`
     CREATE TABLE IF NOT EXISTS risk_management_settings (
@@ -176,6 +220,100 @@ db.serialize(() => {
       stop_loss_percentage, take_profit_percentage, max_open_positions
     ) VALUES (1000, 500, 50, 2.0, 4.0, 5)
   `);
+
+  // Create app_settings table for storing mode state
+  db.run(`
+    CREATE TABLE IF NOT EXISTS app_settings (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      trading_mode TEXT NOT NULL DEFAULT 'SWING' CHECK(trading_mode IN ('DAY', 'SWING')),
+      dev_mode BOOLEAN NOT NULL DEFAULT 0,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  db.run(`
+    INSERT OR IGNORE INTO app_settings (id, trading_mode, dev_mode)
+    VALUES (1, 'SWING', 0)
+  `);
 });
 
-module.exports = db;
+// Function to initialize schema (used when switching databases)
+const initializeSchema = () => {
+  db.serialize(() => {
+    // Copy all the schema creation logic here for new databases
+    db.run(`
+      CREATE TABLE IF NOT EXISTS risk_management_settings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        max_position_size REAL NOT NULL DEFAULT 1000,
+        max_daily_loss REAL NOT NULL DEFAULT 500,
+        max_risk_per_trade REAL NOT NULL DEFAULT 50,
+        stop_loss_percentage REAL NOT NULL DEFAULT 2.0,
+        take_profit_percentage REAL NOT NULL DEFAULT 4.0,
+        max_open_positions INTEGER NOT NULL DEFAULT 5,
+        enable_alerts BOOLEAN NOT NULL DEFAULT 1,
+        state_tax_rate REAL DEFAULT 0.0,
+        federal_tax_rate REAL DEFAULT 0.0,
+        margin_interest_rate REAL DEFAULT 0.0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    db.run(`
+      CREATE TABLE IF NOT EXISTS trades (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        symbol TEXT NOT NULL,
+        type TEXT NOT NULL CHECK(type IN ('LONG', 'SHORT')),
+        quantity REAL NOT NULL,
+        entry_price REAL NOT NULL,
+        exit_price REAL,
+        stop_loss REAL,
+        take_profit REAL,
+        status TEXT NOT NULL DEFAULT 'OPEN' CHECK(status IN ('OPEN', 'CLOSED', 'CANCELLED')),
+        profit_loss REAL,
+        risk_amount REAL,
+        r_size REAL,
+        entry_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+        exit_time DATETIME,
+        notes TEXT,
+        strategy TEXT,
+        position_size REAL,
+        target_price REAL,
+        tax_amount REAL,
+        margin_interest REAL,
+        state_tax_rate REAL,
+        federal_tax_rate REAL,
+        margin_interest_rate REAL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    db.run(`
+      CREATE TABLE IF NOT EXISTS app_settings (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        trading_mode TEXT NOT NULL DEFAULT 'SWING' CHECK(trading_mode IN ('DAY', 'SWING')),
+        dev_mode BOOLEAN NOT NULL DEFAULT 0,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    db.run(`
+      INSERT OR IGNORE INTO risk_management_settings (
+        max_position_size, max_daily_loss, max_risk_per_trade, 
+        stop_loss_percentage, take_profit_percentage, max_open_positions
+      ) VALUES (1000, 500, 50, 2.0, 4.0, 5)
+    `);
+
+    db.run(`
+      INSERT OR IGNORE INTO app_settings (id, trading_mode, dev_mode)
+      VALUES (1, 'SWING', 0)
+    `);
+  });
+};
+
+module.exports = {
+  getDb,
+  switchDatabase,
+  isDevMode,
+};

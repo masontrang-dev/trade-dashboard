@@ -86,6 +86,25 @@ class ApiService {
     });
   }
 
+  // Mode switching
+  async switchTradingMode(mode, devMode) {
+    return this.request("/trades/switch-mode", {
+      method: "POST",
+      body: JSON.stringify({ mode, devMode }),
+    });
+  }
+
+  async switchDevMode(devMode) {
+    return this.request("/trades/switch-dev-mode", {
+      method: "POST",
+      body: JSON.stringify({ devMode }),
+    });
+  }
+
+  async getModeSettings() {
+    return this.request("/trades/mode-settings");
+  }
+
   // Health check
   async healthCheck() {
     return this.request("/health");
