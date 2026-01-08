@@ -320,45 +320,46 @@
             </div>
           </div>
 
-          <div class="progress-bars">
-            <div class="progress-item" v-if="trade.target1">
-              <span class="progress-label">To T1:</span>
-              <div class="progress-bar">
+          <div class="r-progress-section">
+            <div class="r-progress-label">R Progress</div>
+            <div class="r-progress-bar">
+              <div class="r-progress-track">
+                <!-- Markers -->
+                <div class="r-marker stop" title="Stop Loss: -1R">
+                  <span class="marker-label">Stop</span>
+                </div>
+                <div class="r-marker entry" title="Entry: 0R">
+                  <span class="marker-label">Entry</span>
+                </div>
                 <div
-                  class="progress-fill"
-                  :style="{
-                    width: progressToTarget(trade, trade.target1) + '%',
-                  }"
-                  :class="
-                    progressToTarget(trade, trade.target1) >= 100
-                      ? 'completed'
-                      : ''
-                  "
-                ></div>
-              </div>
-              <span class="progress-text"
-                >{{ progressToTarget(trade, trade.target1).toFixed(0) }}%</span
-              >
-            </div>
-
-            <div class="progress-item" v-if="trade.target2">
-              <span class="progress-label">To T2:</span>
-              <div class="progress-bar">
+                  class="r-marker target1"
+                  title="Target 1: +1R"
+                  v-if="trade.target1"
+                >
+                  <span class="marker-label">T1</span>
+                </div>
                 <div
-                  class="progress-fill"
-                  :style="{
-                    width: progressToTarget(trade, trade.target2) + '%',
+                  class="r-marker target2"
+                  title="Target 2: +2R"
+                  v-if="trade.target2"
+                >
+                  <span class="marker-label">T2</span>
+                </div>
+                <!-- Progress indicator -->
+                <div
+                  class="r-progress-indicator"
+                  :class="{
+                    positive: currentRMultiple(trade) > 0,
+                    negative: currentRMultiple(trade) < 0,
                   }"
-                  :class="
-                    progressToTarget(trade, trade.target2) >= 100
-                      ? 'completed'
-                      : ''
-                  "
-                ></div>
+                  :style="{ left: calculateRProgressPosition(trade) + '%' }"
+                  :title="currentRMultiple(trade).toFixed(2) + 'R'"
+                >
+                  <span class="indicator-value"
+                    >{{ currentRMultiple(trade).toFixed(2) }}R</span
+                  >
+                </div>
               </div>
-              <span class="progress-text"
-                >{{ progressToTarget(trade, trade.target2).toFixed(0) }}%</span
-              >
             </div>
           </div>
 
@@ -535,6 +536,22 @@ const progressToTarget = computed(() => (trade, target) => {
   if (totalRange === 0) return 0;
   return Math.min(100, Math.max(0, (currentProgress / totalRange) * 100));
 });
+
+const calculateRProgressPosition = (trade) => {
+  const rMultiple = currentRMultiple.value(trade);
+  // Scale: -1R to +2R (total range of 3R)
+  // -1R = 0%, 0R = 33.33%, +1R = 66.67%, +2R = 100%
+  const minR = -1;
+  const maxR = 2;
+  const rangeR = maxR - minR; // 3R total
+
+  // Clamp the value between -1R and +2R
+  const clampedR = Math.max(minR, Math.min(maxR, rMultiple));
+
+  // Calculate percentage position
+  const position = ((clampedR - minR) / rangeR) * 100;
+  return position;
+};
 
 const formatDateTimeForInput = (dateString) => {
   if (!dateString) return "";
@@ -968,45 +985,144 @@ const confirmCloseTrade = async (trade) => {
   color: #e74c3c;
 }
 
-.progress-bars {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+/* R-based Progress Bar Styles */
+.r-progress-section {
+  margin-top: 12px;
+  padding: 16px;
+  background: #f8f9fa;
+  border-radius: 6px;
 }
 
-.progress-item {
-  display: grid;
-  grid-template-columns: 60px 1fr 40px;
-  align-items: center;
-  gap: 10px;
-}
-
-.progress-label {
+.r-progress-label {
   font-size: 0.85rem;
+  font-weight: 600;
+  padding-bottom: 16px;
   color: #5a6c7d;
+  margin-bottom: 16px;
 }
 
-.progress-bar {
-  height: 6px;
-  background: #ecf0f1;
-  border-radius: 3px;
-  overflow: hidden;
+.r-progress-bar {
+  width: 100%;
+  height: 40px;
+  position: relative;
 }
 
-.progress-fill {
-  height: 100%;
-  background: #3498db;
-  transition: width 0.3s ease;
+.r-progress-track {
+  position: relative;
+  width: 100%;
+  height: 8px;
+  background: linear-gradient(
+    to right,
+    #e74c3c 0%,
+    #e74c3c 33.33%,
+    #ecf0f1 33.33%,
+    #ecf0f1 66.67%,
+    #27ae60 66.67%,
+    #27ae60 100%
+  );
+  border-radius: 4px;
+  margin-top: 12px;
 }
 
-.progress-fill.completed {
+.r-marker {
+  position: absolute;
+  top: -4px;
+  width: 2px;
+  height: 16px;
+  background: #2c3e50;
+  transform: translateX(-50%);
+}
+
+.r-marker.stop {
+  left: 0%;
+  background: #c0392b;
+}
+
+.r-marker.entry {
+  left: 33.33%;
+  background: #34495e;
+  height: 20px;
+  top: -6px;
+  width: 3px;
+}
+
+.r-marker.target1 {
+  left: 66.67%;
   background: #27ae60;
 }
 
-.progress-text {
-  font-size: 0.85rem;
+.r-marker.target2 {
+  left: 100%;
+  background: #229954;
+}
+
+.marker-label {
+  position: absolute;
+  top: -18px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.65rem;
+  font-weight: 600;
   color: #5a6c7d;
-  text-align: right;
+  white-space: nowrap;
+}
+
+.r-marker.stop .marker-label {
+  color: #c0392b;
+}
+
+.r-marker.entry .marker-label {
+  color: #34495e;
+  font-weight: 700;
+}
+
+.r-marker.target1 .marker-label,
+.r-marker.target2 .marker-label {
+  color: #27ae60;
+}
+
+.r-progress-indicator {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 3px solid white;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  z-index: 10;
+  transition: left 0.3s ease;
+}
+
+.r-progress-indicator.positive {
+  background: #27ae60;
+}
+
+.r-progress-indicator.negative {
+  background: #e74c3c;
+}
+
+.indicator-value {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.7rem;
+  font-weight: 700;
+  white-space: nowrap;
+  color: #2c3e50;
+  background: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.r-progress-indicator.positive .indicator-value {
+  color: #27ae60;
+}
+
+.r-progress-indicator.negative .indicator-value {
+  color: #e74c3c;
 }
 
 .expanded-details {
