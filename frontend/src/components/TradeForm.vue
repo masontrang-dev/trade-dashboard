@@ -293,6 +293,17 @@
 
 <script setup>
 import { ref, computed, watch } from "vue";
+import {
+  calculateRiskPerShare,
+  calculatePositionSize,
+  calculateTotalRisk,
+  calculatePositionValue,
+  calculateTargetPrice,
+  calculateRiskPercentage,
+  calculateRemainingRisk,
+  dollarsToR,
+  getRiskWarningLevel,
+} from "../../../shared/tradeCalculations";
 
 const emit = defineEmits(["trade-added"]);
 
@@ -414,14 +425,12 @@ const rValueDollars = computed(() => {
 });
 
 const riskPerShare = computed(() => {
-  if (!trade.value.entryPrice || !trade.value.stopLoss) return 0;
-  return Math.abs(trade.value.entryPrice - trade.value.stopLoss);
+  return calculateRiskPerShare(trade.value.entryPrice, trade.value.stopLoss);
 });
 
 const calculatedShares = computed(() => {
-  if (riskPerShare.value === 0) return 0;
   const rDollars = trade.value.rSize || props.defaultRSize;
-  return Math.floor(rDollars / riskPerShare.value);
+  return calculatePositionSize(rDollars, riskPerShare.value);
 });
 
 const sharesCalculationInfo = computed(() => {
@@ -435,61 +444,63 @@ const sharesCalculationInfo = computed(() => {
 });
 
 const totalRisk = computed(() => {
-  return riskPerShare.value * calculatedShares.value;
+  return calculateTotalRisk(riskPerShare.value, calculatedShares.value);
 });
 
 const totalRiskR = computed(() => {
   const rSize = trade.value.rSize || props.defaultRSize;
-  return totalRisk.value / rSize;
+  return dollarsToR(totalRisk.value, rSize);
 });
 
 const positionValue = computed(() => {
-  if (!trade.value.entryPrice || calculatedShares.value === 0) return 0;
-  return calculatedShares.value * trade.value.entryPrice;
+  return calculatePositionValue(trade.value.entryPrice, calculatedShares.value);
 });
 
 const calculatedTarget1 = computed(() => {
-  if (!trade.value.entryPrice || riskPerShare.value === 0) return 0;
-  const target = trade.value.entryPrice + riskPerShare.value;
-  return Math.round(target * 100) / 100; // Round to nearest cent
+  return calculateTargetPrice(
+    trade.value.type || "LONG",
+    trade.value.entryPrice,
+    riskPerShare.value,
+    1 // +1R
+  );
 });
 
 const calculatedTarget2 = computed(() => {
-  if (!trade.value.entryPrice || riskPerShare.value === 0) return 0;
-  const target = trade.value.entryPrice + 2 * riskPerShare.value;
-  return Math.round(target * 100) / 100; // Round to nearest cent
+  return calculateTargetPrice(
+    trade.value.type || "LONG",
+    trade.value.entryPrice,
+    riskPerShare.value,
+    2 // +2R
+  );
 });
 
 const rMultipleTarget1 = computed(() => {
   if (!trade.value.entryPrice || !trade.value.target1 || !riskPerShare.value)
     return 0;
   const profit = Math.abs(trade.value.target1 - trade.value.entryPrice);
-  return profit / riskPerShare.value;
+  return dollarsToR(profit, riskPerShare.value);
 });
 
 const rMultipleTarget2 = computed(() => {
   if (!trade.value.entryPrice || !trade.value.target2 || !riskPerShare.value)
     return 0;
   const profit = Math.abs(trade.value.target2 - trade.value.entryPrice);
-  return profit / riskPerShare.value;
+  return dollarsToR(profit, riskPerShare.value);
 });
 
 const dailyRiskPercentage = computed(() => {
-  if (!props.maxDailyLoss || props.maxDailyLoss === 0) return 0;
-  return (totalRisk.value / props.maxDailyLoss) * 100;
+  return calculateRiskPercentage(totalRisk.value, props.maxDailyLoss);
 });
 
 const dailyRiskWarningIcon = computed(() => {
-  const percentage = dailyRiskPercentage.value;
-  if (percentage >= 80) return "🔴";
-  if (percentage >= 50) return "⚠️";
-  return "✅";
+  return getRiskWarningLevel(dailyRiskPercentage.value).icon;
 });
 
 const remainingDailyRiskAfterTrade = computed(() => {
-  const remaining =
-    props.maxDailyLoss - (props.dailyRiskUsed + totalRisk.value);
-  return Math.max(0, remaining);
+  return calculateRemainingRisk(
+    props.maxDailyLoss,
+    props.dailyRiskUsed + totalRisk.value
+  );
 });
 
 // Auto-update targets when calculation changes

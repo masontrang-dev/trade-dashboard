@@ -40,7 +40,7 @@
             <span class="strategy-badge" v-if="trade.strategy">{{
               trade.strategy
             }}</span>
-            <span class="entry-date">{{ formatDate(trade.entry_time) }}</span>
+            <span class="entry-date">{{ formatDate(trade.entryTime) }}</span>
           </div>
           <div class="trade-actions">
             <button
@@ -100,12 +100,12 @@
               <span
                 class="value"
                 :class="{
-                  'text-green-500': trade.current_price > trade.entryPrice,
-                  'text-red-500': trade.current_price < trade.entryPrice,
+                  'text-green-500': trade.currentPrice > trade.entryPrice,
+                  'text-red-500': trade.currentPrice < trade.entryPrice,
                 }"
               >
                 ${{
-                  trade.current_price ? trade.current_price.toFixed(2) : "--.--"
+                  trade.currentPrice ? trade.currentPrice.toFixed(2) : "--.--"
                 }}
               </span>
             </div>
@@ -136,11 +136,11 @@
                 <div class="detail-item">
                   <span class="label">Shares:</span>
                   <span v-if="editingTradeId !== trade.id" class="value">{{
-                    trade.shares
+                    trade.quantity
                   }}</span>
                   <input
                     v-else
-                    v-model.number="editForm.shares"
+                    v-model.number="editForm.quantity"
                     type="number"
                     step="1"
                     min="1"
@@ -151,11 +151,11 @@
                 <div class="detail-item">
                   <span class="label">Position Size:</span>
                   <span v-if="editingTradeId !== trade.id" class="value">
-                    ${{ (trade.entryPrice * trade.shares).toFixed(2) }}
+                    ${{ (trade.entryPrice * trade.quantity).toFixed(2) }}
                   </span>
                   <input
                     v-else
-                    v-model.number="editForm.position_size"
+                    v-model.number="editForm.positionSize"
                     type="number"
                     step="0.01"
                     min="0.01"
@@ -244,7 +244,7 @@
                 <div class="detail-item">
                   <span class="label">Entry Date:</span>
                   <input
-                    v-model="editForm.entry_time"
+                    v-model="editForm.entryTime"
                     type="datetime-local"
                     class="inline-edit-input"
                   />
@@ -252,7 +252,7 @@
                 <div class="detail-item">
                   <span class="label">Exit Date:</span>
                   <input
-                    v-model="editForm.exit_time"
+                    v-model="editForm.exitTime"
                     type="datetime-local"
                     class="inline-edit-input"
                   />
@@ -453,6 +453,12 @@
 import { ref, computed, watch } from "vue";
 import apiService from "../services/api";
 import Toast from "./Toast.vue";
+import {
+  calculateProfitLoss,
+  calculateProfitLossPercent,
+  calculateRMultiple,
+  dollarsToR,
+} from "../../../shared/tradeCalculations";
 
 const props = defineProps({
   trades: {
@@ -495,30 +501,31 @@ const showToast = (message, type = "success") => {
 };
 
 const currentPnL = computed(() => (trade) => {
-  if (!trade?.current_price) return 0;
-  const priceDiff =
-    trade.type.toLowerCase() === "long"
-      ? trade.current_price - trade.entryPrice
-      : trade.entryPrice - trade.current_price;
-  return priceDiff * trade.shares;
+  if (!trade?.currentPrice) return 0;
+  return calculateProfitLoss(
+    trade.type,
+    trade.entryPrice,
+    trade.currentPrice,
+    trade.quantity
+  );
 });
 
 const currentPnLPercent = computed(() => (trade) => {
-  if (!trade?.current_price || !trade?.entryPrice || !trade?.shares)
+  if (!trade?.currentPrice || !trade?.entryPrice || !trade?.quantity)
     return null;
-  const positionSize = trade.entryPrice * trade.shares;
-  if (positionSize === 0) return null;
-  return (currentPnL.value(trade) / positionSize) * 100;
+  return calculateProfitLossPercent(
+    currentPnL.value(trade),
+    trade.entryPrice,
+    trade.quantity
+  );
 });
 
 const currentRMultiple = computed(() => (trade) => {
-  if (!trade?.riskAmount || trade.riskAmount === 0) return 0;
-  return currentPnL.value(trade) / trade.riskAmount;
+  return calculateRMultiple(currentPnL.value(trade), trade.riskAmount);
 });
 
 const riskAmountR = computed(() => (trade) => {
-  if (!trade.riskAmount || props.defaultRSize <= 0) return 0;
-  return trade.riskAmount / props.defaultRSize;
+  return dollarsToR(trade.riskAmount, props.defaultRSize);
 });
 
 const progressToTarget = computed(() => (trade, target) => {
@@ -574,12 +581,12 @@ const startEditTrade = (trade) => {
     stopLoss: trade.stopLoss,
     target1: trade.target1,
     target2: trade.target2,
-    shares: trade.shares,
-    position_size: trade.position_size || trade.entryPrice * trade.shares,
+    quantity: trade.quantity,
+    positionSize: trade.positionSize || trade.entryPrice * trade.quantity,
     riskAmount: trade.riskAmount,
     notes: trade.notes || "",
-    entry_time: formatDateTimeForInput(trade.entry_time),
-    exit_time: formatDateTimeForInput(trade.exit_time),
+    entryTime: formatDateTimeForInput(trade.entryTime),
+    exitTime: formatDateTimeForInput(trade.exitTime),
   };
   // Auto-expand the details section when editing
   if (expandedTradeId.value !== trade.id) {
@@ -587,12 +594,12 @@ const startEditTrade = (trade) => {
   }
 };
 
-// Watch for changes to shares or entryPrice and recalculate position_size
+// Watch for changes to quantity or entryPrice and recalculate positionSize
 watch(
-  () => [editForm.value.shares, editForm.value.entryPrice],
-  ([shares, entryPrice]) => {
-    if (shares && entryPrice && editingTradeId.value !== null) {
-      editForm.value.position_size = shares * entryPrice;
+  () => [editForm.value.quantity, editForm.value.entryPrice],
+  ([quantity, entryPrice]) => {
+    if (quantity && entryPrice && editingTradeId.value !== null) {
+      editForm.value.positionSize = quantity * entryPrice;
     }
   }
 );
@@ -607,15 +614,15 @@ const saveTradeEdit = async () => {
     const updateData = {
       symbol: editForm.value.ticker,
       strategy: editForm.value.strategy,
-      entry_price: editForm.value.entryPrice,
-      stop_loss: editForm.value.stopLoss,
-      take_profit: editForm.value.target1,
-      quantity: editForm.value.shares,
-      position_size: editForm.value.position_size,
-      risk_amount: editForm.value.riskAmount,
+      entryPrice: editForm.value.entryPrice,
+      stopLoss: editForm.value.stopLoss,
+      targetPrice1: editForm.value.target1,
+      quantity: editForm.value.quantity,
+      positionSize: editForm.value.positionSize,
+      riskAmount: editForm.value.riskAmount,
       notes: editForm.value.notes,
-      entry_time: editForm.value.entry_time,
-      exit_time: editForm.value.exit_time,
+      entryTime: editForm.value.entryTime,
+      exitTime: editForm.value.exitTime,
     };
 
     await apiService.updateTrade(editingTradeId.value, updateData);
@@ -629,12 +636,12 @@ const saveTradeEdit = async () => {
       stopLoss: editForm.value.stopLoss,
       target1: editForm.value.target1,
       target2: editForm.value.target2,
-      shares: editForm.value.shares,
-      position_size: editForm.value.position_size,
+      quantity: editForm.value.quantity,
+      positionSize: editForm.value.positionSize,
       riskAmount: editForm.value.riskAmount,
       notes: editForm.value.notes,
-      entry_time: editForm.value.entry_time,
-      exit_time: editForm.value.exit_time,
+      entryTime: editForm.value.entryTime,
+      exitTime: editForm.value.exitTime,
     };
 
     emit("trade-updated", updatedTrade);
@@ -673,15 +680,15 @@ const toggleCloseTrade = (trade) => {
     closingTradeId.value = trade.id;
     // Pre-populate with current price and current date/time
     closeForm.value = {
-      exitPrice: trade.current_price || trade.entryPrice,
+      exitPrice: trade.currentPrice || trade.entryPrice,
       closeDate: formatDateTimeLocal(new Date()),
     };
   }
 };
 
 const calculateDaysHeld = (trade) => {
-  if (!trade.entry_time) return 0;
-  const entryDate = new Date(trade.entry_time);
+  if (!trade.entryTime) return 0;
+  const entryDate = new Date(trade.entryTime);
   const closeDate = closeForm.value.closeDate
     ? new Date(closeForm.value.closeDate)
     : new Date();
@@ -696,12 +703,12 @@ const calculateClosePnL = (trade) => {
     trade.type.toLowerCase() === "long"
       ? closeForm.value.exitPrice - trade.entryPrice
       : trade.entryPrice - closeForm.value.exitPrice;
-  return priceDiff * trade.shares;
+  return priceDiff * trade.quantity;
 };
 
 const calculateClosePnLPercent = (trade) => {
   if (!closeForm.value.exitPrice) return 0;
-  const positionSize = trade.entryPrice * trade.shares;
+  const positionSize = trade.entryPrice * trade.quantity;
   if (positionSize === 0) return 0;
   return (calculateClosePnL(trade) / positionSize) * 100;
 };

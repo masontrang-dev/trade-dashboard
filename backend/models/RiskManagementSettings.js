@@ -1,27 +1,5 @@
 const { getDb } = require("./database");
 
-// Map between frontend camelCase and database snake_case field names
-const fieldMap = {
-  // Frontend field: Database field
-  maxDailyLoss: "max_daily_loss",
-  maxOpenRisk: "max_position_size",
-  maxPositions: "max_open_positions",
-  defaultRSize: "max_risk_per_trade",
-  enableAlerts: "enable_alerts",
-  stateTaxRate: "state_tax_rate",
-  federalTaxRate: "federal_tax_rate",
-  marginInterestRate: "margin_interest_rate",
-};
-
-// Reverse map for database to frontend
-const reverseFieldMap = Object.entries(fieldMap).reduce(
-  (acc, [frontend, dbField]) => {
-    acc[dbField] = frontend;
-    return acc;
-  },
-  {}
-);
-
 class RiskManagementSettings {
   static async get() {
     return new Promise((resolve, reject) => {
@@ -48,21 +26,8 @@ class RiskManagementSettings {
               return;
             }
 
-            console.log("Raw database row:", row);
-
-            // Convert database field names to frontend field names
-            const frontendRow = {};
-            Object.entries(row).forEach(([dbField, value]) => {
-              const frontendField = reverseFieldMap[dbField] || dbField;
-              frontendRow[frontendField] = value;
-              console.log(
-                `Mapping DB field ${dbField} to frontend field ${frontendField} with value:`,
-                value
-              );
-            });
-
-            console.log("Final frontend row:", frontendRow);
-            resolve(frontendRow);
+            console.log("Database row:", row);
+            resolve(row);
           }
         }
       );
@@ -76,18 +41,13 @@ class RiskManagementSettings {
       const setClauses = [];
       const values = [];
 
-      // Convert frontend field names to database field names and build the SET clause
+      // Build the SET clause with camelCase field names
       Object.entries(settings).forEach(([key, value]) => {
-        if (fieldMap[key] !== undefined) {
-          const dbField = fieldMap[key];
-          // Convert boolean to 1/0 for SQLite
-          const dbValue = typeof value === "boolean" ? (value ? 1 : 0) : value;
-          console.log(`Mapping ${key} to ${dbField} with value:`, dbValue);
-          setClauses.push(`${dbField} = ?`);
-          values.push(dbValue);
-        } else {
-          console.log(`Skipping field ${key} - not in fieldMap`);
-        }
+        // Convert boolean to 1/0 for SQLite
+        const dbValue = typeof value === "boolean" ? (value ? 1 : 0) : value;
+        console.log(`Setting ${key} with value:`, dbValue);
+        setClauses.push(`${key} = ?`);
+        values.push(dbValue);
       });
 
       if (setClauses.length === 0) {
@@ -97,8 +57,8 @@ class RiskManagementSettings {
         return;
       }
 
-      // Add updated_at to the SET clause and values
-      setClauses.push("updated_at = ?");
+      // Add updatedAt to the SET clause and values
+      setClauses.push("updatedAt = ?");
       values.push(new Date().toISOString());
 
       // First, try to update the first record
@@ -123,26 +83,22 @@ class RiskManagementSettings {
         // If no rows were updated, try to insert
         if (changes === 0) {
           console.log("No rows updated, attempting to insert new record");
-          const insertFields = Object.entries(settings)
-            .filter(([key]) => fieldMap[key])
-            .map(([key]) => fieldMap[key]);
+          const insertFields = Object.keys(settings);
 
           if (insertFields.length === 0) {
             return reject(new Error("No valid fields to insert"));
           }
 
-          const insertValues = Object.entries(settings)
-            .filter(([key]) => fieldMap[key])
-            .map(([key, value]) =>
-              typeof value === "boolean" ? (value ? 1 : 0) : value
-            );
+          const insertValues = Object.values(settings).map((value) =>
+            typeof value === "boolean" ? (value ? 1 : 0) : value
+          );
 
           const placeholders = insertFields.map(() => "?").join(", ");
           const insertSql = `
             INSERT INTO risk_management_settings (
               ${insertFields.join(", ")}, 
-              created_at, 
-              updated_at
+              createdAt, 
+              updatedAt
             ) VALUES (${placeholders}, ?, ?)
           `;
 

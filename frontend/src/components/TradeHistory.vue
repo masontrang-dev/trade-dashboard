@@ -187,9 +187,7 @@
                 />
               </td>
               <td>
-                <span v-if="!editMode">{{
-                  trade.quantity || trade.shares || 0
-                }}</span>
+                <span v-if="!editMode">{{ trade.quantity || 0 }}</span>
                 <input
                   v-else
                   v-model.number="editedTrades[trade.id].quantity"
@@ -298,6 +296,12 @@
 import { ref, computed, watch } from "vue";
 import Toast from "./Toast.vue";
 import api from "../services/api";
+import {
+  calculateProfitLoss,
+  calculateTaxAmount,
+  calculateMarginInterest,
+  calculateDaysHeld,
+} from "../../../shared/tradeCalculations";
 
 const props = defineProps({
   history: {
@@ -447,7 +451,7 @@ const tradeRMultiple = (trade) => {
 };
 
 const calculatePnLPercent = (trade) => {
-  const entryValue = trade.entryPrice * (trade.quantity || trade.shares || 0);
+  const entryValue = trade.entryPrice * (trade.quantity || 0);
   return entryValue > 0 ? (trade.profitLoss / entryValue) * 100 : 0;
 };
 
@@ -496,7 +500,7 @@ const enterEditMode = () => {
       strategy: trade.strategy || "",
       entryPrice: trade.entryPrice,
       exitPrice: trade.exitPrice,
-      quantity: trade.quantity || trade.shares,
+      quantity: trade.quantity,
       entryDate: formatDateTimeForInput(trade.entryDate),
       closeDate: formatDateTimeForInput(trade.closeDate),
     };
@@ -523,47 +527,41 @@ const saveAllChanges = async () => {
       const exitPrice = parseFloat(edited.exitPrice);
       const quantity = parseFloat(edited.quantity);
 
-      let profitLoss;
-      if (originalTrade.type.toLowerCase() === "long") {
-        profitLoss = (exitPrice - entryPrice) * quantity;
-      } else {
-        profitLoss = (entryPrice - exitPrice) * quantity;
-      }
-
-      profitLoss = Math.round(profitLoss * 100) / 100;
+      const profitLoss = calculateProfitLoss(
+        originalTrade.type,
+        entryPrice,
+        exitPrice,
+        quantity
+      );
 
       // Calculate tax (using original tax rates if available)
-      const stateTaxRate = originalTrade.stateTaxRate || 0;
-      const federalTaxRate = originalTrade.federalTaxRate || 0;
-      const combinedTaxRate = (stateTaxRate + federalTaxRate) / 100;
-      const taxAmount =
-        Math.round((profitLoss > 0 ? profitLoss * combinedTaxRate : 0) * 100) /
-        100;
+      const taxAmount = calculateTaxAmount(
+        profitLoss,
+        originalTrade.stateTaxRate || 0,
+        originalTrade.federalTaxRate || 0
+      );
 
       // Calculate margin interest
       const positionSize = originalTrade.positionSize || entryPrice * quantity;
-      const marginRate = (originalTrade.marginInterestRate || 0) / 100;
-      const entryDate = new Date(edited.entryDate);
-      const exitDate = new Date(edited.closeDate);
-      const daysHeld = Math.max(
-        1,
-        Math.ceil((exitDate - entryDate) / (1000 * 60 * 60 * 24))
+      const daysHeld = calculateDaysHeld(edited.entryDate, edited.closeDate);
+      const marginInterest = calculateMarginInterest(
+        positionSize,
+        originalTrade.marginInterestRate || 0,
+        daysHeld
       );
-      const marginInterest =
-        Math.round(((positionSize * marginRate) / 360) * daysHeld * 100) / 100;
 
       const updateData = {
         symbol: edited.ticker,
         strategy: edited.strategy,
-        entry_price: entryPrice,
-        exit_price: exitPrice,
+        entryPrice: entryPrice,
+        exitPrice: exitPrice,
         quantity: quantity,
-        entry_time: edited.entryDate,
-        exit_time: edited.closeDate,
-        profit_loss: profitLoss,
-        tax_amount: taxAmount,
-        margin_interest: marginInterest,
-        position_size: entryPrice * quantity,
+        entryTime: edited.entryDate,
+        exitTime: edited.closeDate,
+        profitLoss: profitLoss,
+        taxAmount: taxAmount,
+        marginInterest: marginInterest,
+        positionSize: entryPrice * quantity,
       };
 
       return api.updateTrade(tradeId, updateData);

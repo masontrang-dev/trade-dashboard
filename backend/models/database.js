@@ -59,50 +59,24 @@ db.serialize(() => {
   db.run(`
     CREATE TABLE IF NOT EXISTS risk_management_settings (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      max_position_size REAL NOT NULL DEFAULT 1000,
-      max_daily_loss REAL NOT NULL DEFAULT 500,
-      max_risk_per_trade REAL NOT NULL DEFAULT 50,
-      stop_loss_percentage REAL NOT NULL DEFAULT 2.0,
-      take_profit_percentage REAL NOT NULL DEFAULT 4.0,
-      max_open_positions INTEGER NOT NULL DEFAULT 5,
-      enable_alerts BOOLEAN NOT NULL DEFAULT 1,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      maxPositionSize REAL NOT NULL DEFAULT 1000,
+      maxDailyLoss REAL NOT NULL DEFAULT 500,
+      maxRiskPerTrade REAL NOT NULL DEFAULT 50,
+      stopLossPercentage REAL NOT NULL DEFAULT 2.0,
+      takeProfitPercentage REAL NOT NULL DEFAULT 4.0,
+      maxOpenPositions INTEGER NOT NULL DEFAULT 5,
+      enableAlerts BOOLEAN NOT NULL DEFAULT 1,
+      defaultRSize REAL DEFAULT 2500,
+      maxOpenRisk REAL DEFAULT 2000,
+      stateTaxRate REAL DEFAULT 0.0,
+      federalTaxRate REAL DEFAULT 0.0,
+      marginInterestRate REAL DEFAULT 0.0,
+      createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
 
-  db.run(
-    `
-    ALTER TABLE risk_management_settings ADD COLUMN state_tax_rate REAL DEFAULT 0.0;
-  `,
-    (err) => {
-      if (err && !err.message.includes("duplicate column")) {
-        console.error("Error adding state_tax_rate column:", err.message);
-      }
-    }
-  );
-
-  db.run(
-    `
-    ALTER TABLE risk_management_settings ADD COLUMN federal_tax_rate REAL DEFAULT 0.0;
-  `,
-    (err) => {
-      if (err && !err.message.includes("duplicate column")) {
-        console.error("Error adding federal_tax_rate column:", err.message);
-      }
-    }
-  );
-
-  db.run(
-    `
-    ALTER TABLE risk_management_settings ADD COLUMN margin_interest_rate REAL DEFAULT 0.0;
-  `,
-    (err) => {
-      if (err && !err.message.includes("duplicate column")) {
-        console.error("Error adding margin_interest_rate column:", err.message);
-      }
-    }
-  );
+  // Legacy ALTER TABLE statements removed - schema now includes all fields
 
   db.run(`
     CREATE TABLE IF NOT EXISTS trades (
@@ -110,125 +84,37 @@ db.serialize(() => {
       symbol TEXT NOT NULL,
       type TEXT NOT NULL CHECK(type IN ('LONG', 'SHORT')),
       quantity REAL NOT NULL,
-      entry_price REAL NOT NULL,
-      exit_price REAL,
-      stop_loss REAL,
-      take_profit REAL,
+      entryPrice REAL NOT NULL,
+      exitPrice REAL,
+      stopLoss REAL,
+      targetPrice1 REAL,
+      targetPrice2 REAL,
       status TEXT NOT NULL DEFAULT 'OPEN' CHECK(status IN ('OPEN', 'CLOSED', 'CANCELLED')),
-      profit_loss REAL,
-      risk_amount REAL,
-      r_size REAL,
-      entry_time DATETIME DEFAULT CURRENT_TIMESTAMP,
-      exit_time DATETIME,
+      profitLoss REAL,
+      riskAmount REAL,
+      rSize REAL,
+      entryTime DATETIME DEFAULT CURRENT_TIMESTAMP,
+      exitTime DATETIME,
       notes TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      strategy TEXT,
+      positionSize REAL,
+      taxAmount REAL,
+      marginInterest REAL,
+      stateTaxRate REAL,
+      federalTaxRate REAL,
+      marginInterestRate REAL,
+      tradingMode TEXT CHECK(tradingMode IN ('DAY', 'SWING')),
+      createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
 
-  db.run(
-    `
-    ALTER TABLE trades ADD COLUMN strategy TEXT;
-  `,
-    (err) => {
-      if (err && !err.message.includes("duplicate column")) {
-        console.error("Error adding strategy column:", err.message);
-      }
-    }
-  );
-
-  db.run(
-    `
-    ALTER TABLE trades ADD COLUMN position_size REAL;
-  `,
-    (err) => {
-      if (err && !err.message.includes("duplicate column")) {
-        console.error("Error adding position_size column:", err.message);
-      }
-    }
-  );
-
-  db.run(
-    `
-    ALTER TABLE trades ADD COLUMN target_price REAL;
-  `,
-    (err) => {
-      if (err && !err.message.includes("duplicate column")) {
-        console.error("Error adding target_price column:", err.message);
-      }
-    }
-  );
-
-  db.run(
-    `
-    ALTER TABLE trades ADD COLUMN tax_amount REAL;
-  `,
-    (err) => {
-      if (err && !err.message.includes("duplicate column")) {
-        console.error("Error adding tax_amount column:", err.message);
-      }
-    }
-  );
-
-  db.run(
-    `
-    ALTER TABLE trades ADD COLUMN margin_interest REAL;
-  `,
-    (err) => {
-      if (err && !err.message.includes("duplicate column")) {
-        console.error("Error adding margin_interest column:", err.message);
-      }
-    }
-  );
-
-  db.run(
-    `
-    ALTER TABLE trades ADD COLUMN state_tax_rate REAL;
-  `,
-    (err) => {
-      if (err && !err.message.includes("duplicate column")) {
-        console.error("Error adding state_tax_rate column:", err.message);
-      }
-    }
-  );
-
-  db.run(
-    `
-    ALTER TABLE trades ADD COLUMN federal_tax_rate REAL;
-  `,
-    (err) => {
-      if (err && !err.message.includes("duplicate column")) {
-        console.error("Error adding federal_tax_rate column:", err.message);
-      }
-    }
-  );
-
-  db.run(
-    `
-    ALTER TABLE trades ADD COLUMN margin_interest_rate REAL;
-  `,
-    (err) => {
-      if (err && !err.message.includes("duplicate column")) {
-        console.error("Error adding margin_interest_rate column:", err.message);
-      }
-    }
-  );
-
-  db.run(
-    `
-    ALTER TABLE trades ADD COLUMN trading_mode TEXT CHECK(trading_mode IN ('DAY', 'SWING'));
-  `,
-    (err) => {
-      if (err && !err.message.includes("duplicate column")) {
-        console.error("Error adding trading_mode column:", err.message);
-      }
-    }
-  );
+  // Legacy ALTER TABLE statements removed - schema now includes all fields
 
   db.run(`
     INSERT OR IGNORE INTO risk_management_settings (
-      max_position_size, max_daily_loss, max_risk_per_trade, 
-      stop_loss_percentage, take_profit_percentage, max_open_positions
+      maxPositionSize, maxDailyLoss, maxRiskPerTrade, 
+      stopLossPercentage, takeProfitPercentage, maxOpenPositions
     ) VALUES (1000, 500, 50, 2.0, 4.0, 5)
   `);
 
@@ -236,14 +122,14 @@ db.serialize(() => {
   db.run(`
     CREATE TABLE IF NOT EXISTS app_settings (
       id INTEGER PRIMARY KEY CHECK (id = 1),
-      trading_mode TEXT NOT NULL DEFAULT 'SWING' CHECK(trading_mode IN ('DAY', 'SWING')),
-      dev_mode BOOLEAN NOT NULL DEFAULT 0,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      tradingMode TEXT NOT NULL DEFAULT 'SWING' CHECK(tradingMode IN ('DAY', 'SWING')),
+      devMode BOOLEAN NOT NULL DEFAULT 0,
+      updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
 
   db.run(`
-    INSERT OR IGNORE INTO app_settings (id, trading_mode, dev_mode)
+    INSERT OR IGNORE INTO app_settings (id, tradingMode, devMode)
     VALUES (1, 'SWING', 0)
   `);
 });
@@ -255,18 +141,20 @@ const initializeSchema = () => {
     db.run(`
       CREATE TABLE IF NOT EXISTS risk_management_settings (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        max_position_size REAL NOT NULL DEFAULT 1000,
-        max_daily_loss REAL NOT NULL DEFAULT 500,
-        max_risk_per_trade REAL NOT NULL DEFAULT 50,
-        stop_loss_percentage REAL NOT NULL DEFAULT 2.0,
-        take_profit_percentage REAL NOT NULL DEFAULT 4.0,
-        max_open_positions INTEGER NOT NULL DEFAULT 5,
-        enable_alerts BOOLEAN NOT NULL DEFAULT 1,
-        state_tax_rate REAL DEFAULT 0.0,
-        federal_tax_rate REAL DEFAULT 0.0,
-        margin_interest_rate REAL DEFAULT 0.0,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        maxPositionSize REAL NOT NULL DEFAULT 1000,
+        maxDailyLoss REAL NOT NULL DEFAULT 500,
+        maxRiskPerTrade REAL NOT NULL DEFAULT 50,
+        stopLossPercentage REAL NOT NULL DEFAULT 2.0,
+        takeProfitPercentage REAL NOT NULL DEFAULT 4.0,
+        maxOpenPositions INTEGER NOT NULL DEFAULT 5,
+        enableAlerts BOOLEAN NOT NULL DEFAULT 1,
+        defaultRSize REAL DEFAULT 2500,
+        maxOpenRisk REAL DEFAULT 2000,
+        stateTaxRate REAL DEFAULT 0.0,
+        federalTaxRate REAL DEFAULT 0.0,
+        marginInterestRate REAL DEFAULT 0.0,
+        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
@@ -276,48 +164,49 @@ const initializeSchema = () => {
         symbol TEXT NOT NULL,
         type TEXT NOT NULL CHECK(type IN ('LONG', 'SHORT')),
         quantity REAL NOT NULL,
-        entry_price REAL NOT NULL,
-        exit_price REAL,
-        stop_loss REAL,
-        take_profit REAL,
+        entryPrice REAL NOT NULL,
+        exitPrice REAL,
+        stopLoss REAL,
+        targetPrice1 REAL,
+        targetPrice2 REAL,
         status TEXT NOT NULL DEFAULT 'OPEN' CHECK(status IN ('OPEN', 'CLOSED', 'CANCELLED')),
-        profit_loss REAL,
-        risk_amount REAL,
-        r_size REAL,
-        entry_time DATETIME DEFAULT CURRENT_TIMESTAMP,
-        exit_time DATETIME,
+        profitLoss REAL,
+        riskAmount REAL,
+        rSize REAL,
+        entryTime DATETIME DEFAULT CURRENT_TIMESTAMP,
+        exitTime DATETIME,
         notes TEXT,
         strategy TEXT,
-        position_size REAL,
-        target_price REAL,
-        tax_amount REAL,
-        margin_interest REAL,
-        state_tax_rate REAL,
-        federal_tax_rate REAL,
-        margin_interest_rate REAL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        positionSize REAL,
+        taxAmount REAL,
+        marginInterest REAL,
+        stateTaxRate REAL,
+        federalTaxRate REAL,
+        marginInterestRate REAL,
+        tradingMode TEXT CHECK(tradingMode IN ('DAY', 'SWING')),
+        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
     db.run(`
       CREATE TABLE IF NOT EXISTS app_settings (
         id INTEGER PRIMARY KEY CHECK (id = 1),
-        trading_mode TEXT NOT NULL DEFAULT 'SWING' CHECK(trading_mode IN ('DAY', 'SWING')),
-        dev_mode BOOLEAN NOT NULL DEFAULT 0,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        tradingMode TEXT NOT NULL DEFAULT 'SWING' CHECK(tradingMode IN ('DAY', 'SWING')),
+        devMode BOOLEAN NOT NULL DEFAULT 0,
+        updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
     db.run(`
       INSERT OR IGNORE INTO risk_management_settings (
-        max_position_size, max_daily_loss, max_risk_per_trade, 
-        stop_loss_percentage, take_profit_percentage, max_open_positions
+        maxPositionSize, maxDailyLoss, maxRiskPerTrade, 
+        stopLossPercentage, takeProfitPercentage, maxOpenPositions
       ) VALUES (1000, 500, 50, 2.0, 4.0, 5)
     `);
 
     db.run(`
-      INSERT OR IGNORE INTO app_settings (id, trading_mode, dev_mode)
+      INSERT OR IGNORE INTO app_settings (id, tradingMode, devMode)
       VALUES (1, 'SWING', 0)
     `);
   });

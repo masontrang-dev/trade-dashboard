@@ -1,4 +1,5 @@
 const axios = require("axios");
+const { calculateProfitLoss } = require("../../shared/tradeCalculations");
 
 // Using Yahoo Finance API
 const BASE_URL = "https://query1.finance.yahoo.com/v8/finance/chart";
@@ -172,18 +173,19 @@ class MarketDataService {
         return null;
       }
 
-      const entryPrice = parseFloat(trade.entry_price);
+      const entryPrice = parseFloat(trade.entryPrice || trade.entry_price);
       const quantity = parseFloat(trade.quantity);
 
       if (isNaN(entryPrice) || isNaN(quantity)) {
         throw new Error("Invalid entry price or quantity");
       }
 
-      if (trade.type.toUpperCase() === "LONG") {
-        return (currentPrice - entryPrice) * quantity;
-      } else {
-        return (entryPrice - currentPrice) * quantity;
-      }
+      return calculateProfitLoss(
+        trade.type,
+        entryPrice,
+        currentPrice,
+        quantity
+      );
     } catch (error) {
       console.error("Error calculating P&L:", error);
       return null;

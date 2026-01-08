@@ -249,6 +249,12 @@ import ActiveTrades from "./ActiveTrades.vue";
 import TradeHistory from "./TradeHistory.vue";
 import SettingsModal from "./SettingsModal.vue";
 import api from "../services/api";
+import {
+  calculateRiskPerShare,
+  calculateTotalRisk,
+  calculateProfitLossPercent,
+  calculateRMultiple,
+} from "../../../shared/tradeCalculations";
 
 const maxDailyLoss = ref(500);
 const maxOpenRisk = ref(2000);
@@ -265,24 +271,12 @@ const loadClosedTrades = async () => {
   try {
     const closedTrades = await api.getClosedTrades();
     tradeHistory.value = closedTrades.map((trade) => ({
-      id: trade.id,
+      ...trade,
       ticker: trade.symbol,
       type: trade.type.toLowerCase(),
-      strategy: trade.strategy,
-      entryPrice: trade.entry_price,
-      exitPrice: trade.exit_price,
       quantity: trade.quantity,
-      shares: trade.quantity,
-      profitLoss: trade.profit_loss,
-      entryDate: trade.entry_time,
-      closeDate: trade.exit_time,
-      notes: trade.notes,
-      riskAmount: trade.risk_amount,
-      rSize: trade.r_size,
-      taxAmount: trade.tax_amount,
-      marginInterest: trade.margin_interest,
-      positionSize: trade.position_size || trade.entry_price * trade.quantity,
-      tradingMode: trade.trading_mode,
+      entryDate: trade.entryTime,
+      closeDate: trade.exitTime,
     }));
     console.log("Loaded closed trades:", tradeHistory.value);
   } catch (error) {
@@ -309,50 +303,32 @@ const loadActiveTrades = async () => {
       console.log("Processing trade:", {
         id: trade.id,
         symbol: trade.symbol,
-        hasPrice: trade.current_price !== undefined,
-        hasPnl: trade.pnl !== undefined,
+        hasPrice: trade.currentPrice !== undefined,
       });
 
       // Calculate risk amount if not provided
+      const riskPerShare = calculateRiskPerShare(
+        trade.entryPrice,
+        trade.stopLoss
+      );
       const riskAmount =
-        trade.risk_amount ||
-        (trade.entry_price && trade.stop_loss && trade.quantity
-          ? Math.abs(trade.entry_price - trade.stop_loss) * trade.quantity
-          : 0);
-
-      // Calculate P&L percentage if not provided
-      const pnl = trade.pnl || 0;
-      const pnlPercent =
-        trade.pnl_percent !== undefined && trade.pnl_percent !== null
-          ? trade.pnl_percent
-          : trade.entry_price && trade.quantity && pnl !== 0
-          ? (pnl / (trade.entry_price * trade.quantity)) * 100
-          : 0;
+        trade.riskAmount || calculateTotalRisk(riskPerShare, trade.quantity);
 
       return {
-        id: trade.id,
+        ...trade,
         ticker: trade.symbol,
-        strategy: trade.strategy,
-        type: trade.type,
-        shares: trade.quantity || 0,
-        entryPrice: trade.entry_price || 0,
-        stopLoss: trade.stop_loss || 0,
-        target1: trade.take_profit,
-        target2: trade.target_price,
-        position_size: trade.position_size,
-        notes: trade.notes || "",
+        quantity: trade.quantity || 0,
+        target1: trade.targetPrice1,
+        target2: trade.targetPrice2,
         riskAmount: riskAmount,
-        rSize: trade.r_size || defaultRSize.value,
-        entry_time: trade.entry_time || new Date().toISOString(),
-        exit_time: trade.exit_time,
-        status: trade.status || "OPEN",
-        current_price:
-          trade.current_price !== undefined && trade.current_price !== null
-            ? trade.current_price
-            : trade.entry_price || 0,
-        pnl: pnl,
-        pnl_percent: pnlPercent,
-        tradingMode: trade.trading_mode,
+        rSize: trade.rSize || defaultRSize.value,
+        entryTime: trade.entryTime || new Date().toISOString(),
+        exitTime: trade.exitTime,
+        currentPrice:
+          trade.currentPrice !== undefined && trade.currentPrice !== null
+            ? trade.currentPrice
+            : trade.entryPrice || 0,
+        // P&L will be calculated on-demand in ActiveTrades component from currentPrice
       };
     });
 
@@ -479,9 +455,9 @@ const dailyRiskUsed = computed(() => {
     })
     .reduce((total, trade) => {
       // Calculate remaining downside to stop
-      const currentPrice = trade.current_price || trade.entryPrice;
+      const currentPrice = trade.currentPrice || trade.entryPrice;
       const remainingRisk =
-        Math.abs(currentPrice - trade.stopLoss) * trade.shares;
+        Math.abs(currentPrice - trade.stopLoss) * trade.quantity;
       // Risk can only decrease (when stop is moved), never increase from favorable price movement
       const originalRisk = trade.riskAmount || remainingRisk;
       return total + Math.min(originalRisk, remainingRisk);
@@ -516,9 +492,9 @@ const totalOpenRisk = computed(() => {
         return tradeMode === "DAY";
       })
       .reduce((total, trade) => {
-        const currentPrice = trade.current_price || trade.entryPrice;
+        const currentPrice = trade.currentPrice || trade.entryPrice;
         const remainingRisk =
-          Math.abs(currentPrice - trade.stopLoss) * trade.shares;
+          Math.abs(currentPrice - trade.stopLoss) * trade.quantity;
         // Risk can only decrease (when stop is moved), never increase from favorable price movement
         const originalRisk = trade.riskAmount || remainingRisk;
         return total + Math.min(originalRisk, remainingRisk);
@@ -568,19 +544,19 @@ const handleTradeAdded = async (trade) => {
       strategy: trade.strategy || null,
       type: trade.type.toUpperCase(),
       quantity: trade.calculatedShares || trade.shares,
-      entry_price: parseFloat(trade.entryPrice),
-      stop_loss: parseFloat(trade.stopLoss),
-      take_profit: trade.target1 ? parseFloat(trade.target1) : null,
-      target_price: trade.target1 ? parseFloat(trade.target1) : null,
-      position_size:
+      entryPrice: parseFloat(trade.entryPrice),
+      stopLoss: parseFloat(trade.stopLoss),
+      targetPrice1: trade.target1 ? parseFloat(trade.target1) : null,
+      targetPrice2: trade.target2 ? parseFloat(trade.target2) : null,
+      positionSize:
         parseFloat(trade.entryPrice) * (trade.calculatedShares || trade.shares),
       notes: trade.notes,
-      risk_amount: riskAmount,
-      r_size: defaultRSize.value,
-      state_tax_rate: trade.stateTaxRate || 0,
-      federal_tax_rate: trade.federalTaxRate || 0,
-      margin_interest_rate: trade.marginInterestRate || 0,
-      trading_mode: tradingMode.value,
+      riskAmount: riskAmount,
+      rSize: defaultRSize.value,
+      stateTaxRate: trade.stateTaxRate || 0,
+      federalTaxRate: trade.federalTaxRate || 0,
+      marginInterestRate: trade.marginInterestRate || 0,
+      tradingMode: tradingMode.value,
     };
 
     // Make the API call
@@ -591,14 +567,14 @@ const handleTradeAdded = async (trade) => {
       id: savedTrade.id,
       ticker: trade.ticker,
       type: trade.type.toUpperCase(),
-      shares: trade.calculatedShares || trade.shares,
+      quantity: trade.calculatedShares || trade.shares,
       entryPrice: parseFloat(trade.entryPrice),
       stopLoss: parseFloat(trade.stopLoss),
       target1: trade.target1 ? parseFloat(trade.target1) : null,
       notes: trade.notes,
       riskAmount: riskAmount,
       rSize: defaultRSize.value,
-      entry_time: new Date().toISOString(),
+      entryTime: new Date().toISOString(),
       status: "OPEN",
     };
 
@@ -619,7 +595,7 @@ const handleTradeClosed = async () => {
 };
 
 const handleTradeUpdated = async (updatedTrade) => {
-  // Refetch all active trades to ensure we have current_price and all fields
+  // Refetch all active trades to ensure we have currentPrice and all fields
   await loadActiveTrades();
 };
 

@@ -1,10 +1,19 @@
 const { getDb } = require("./database");
+const {
+  calculateProfitLoss,
+  calculateTaxAmount,
+  calculateMarginInterest,
+  calculateDaysHeld,
+  calculateNetProfit,
+  calculateRMultiple,
+  determineWinLoss,
+} = require("../../shared/tradeCalculations");
 
 class Trade {
   static async getAll() {
     return new Promise((resolve, reject) => {
       const db = getDb();
-      db.all("SELECT * FROM trades ORDER BY entry_time DESC", (err, rows) => {
+      db.all("SELECT * FROM trades ORDER BY entryTime DESC", (err, rows) => {
         if (err) {
           reject(err);
         } else {
@@ -40,25 +49,26 @@ class Trade {
       const {
         symbol,
         quantity,
-        entry_price,
-        stop_loss,
-        take_profit,
+        entryPrice,
+        stopLoss,
+        targetPrice1,
+        targetPrice2,
         notes,
-        risk_amount,
-        r_size,
-        trading_mode,
+        riskAmount,
+        rSize,
+        tradingMode,
       } = tradeData;
 
-      // Round risk_amount to 2 decimal places to avoid floating-point precision issues
-      const roundedRiskAmount = risk_amount
-        ? Math.round(risk_amount * 100) / 100
+      // Round riskAmount to 2 decimal places to avoid floating-point precision issues
+      const roundedRiskAmount = riskAmount
+        ? Math.round(riskAmount * 100) / 100
         : null;
 
       const sql = `
         INSERT INTO trades (
-          symbol, type, quantity, entry_price, stop_loss, 
-          take_profit, notes, risk_amount, r_size, trading_mode, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN')
+          symbol, type, quantity, entryPrice, stopLoss, 
+          targetPrice1, targetPrice2, notes, riskAmount, rSize, tradingMode, status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN')
       `;
 
       db.run(
@@ -67,13 +77,14 @@ class Trade {
           symbol,
           tradeType,
           quantity,
-          entry_price,
-          stop_loss,
-          take_profit,
+          entryPrice,
+          stopLoss,
+          targetPrice1 || null,
+          targetPrice2 || null,
           notes || null,
           roundedRiskAmount,
-          r_size || null,
-          trading_mode || null,
+          rSize || null,
+          tradingMode || null,
         ],
         function (err) {
           if (err) {
@@ -94,9 +105,9 @@ class Trade {
 
       Object.keys(tradeData).forEach((key) => {
         if (tradeData[key] !== undefined) {
-          // Round risk_amount to 2 decimal places to avoid floating-point precision issues
+          // Round riskAmount to 2 decimal places to avoid floating-point precision issues
           const value =
-            key === "risk_amount" && tradeData[key] !== null
+            key === "riskAmount" && tradeData[key] !== null
               ? Math.round(tradeData[key] * 100) / 100
               : tradeData[key];
           fields.push(`${key} = ?`);
@@ -114,7 +125,7 @@ class Trade {
 
       const sql = `UPDATE trades SET ${fields.join(
         ", "
-      )}, updated_at = ? WHERE id = ?`;
+      )}, updatedAt = ? WHERE id = ?`;
 
       db.run(sql, values, function (err) {
         if (err) {
@@ -149,48 +160,38 @@ class Trade {
             return;
           }
 
-          let pnl;
-          if (trade.type === "LONG") {
-            pnl = (exitPrice - trade.entry_price) * trade.quantity;
-          } else {
-            pnl = (trade.entry_price - exitPrice) * trade.quantity;
-          }
+          const pnl = calculateProfitLoss(
+            trade.type,
+            trade.entryPrice,
+            exitPrice,
+            trade.quantity
+          );
 
-          // Round all calculated values to 2 decimal places
-          pnl = Math.round(pnl * 100) / 100;
+          const pnlPercent = (pnl / (trade.entryPrice * trade.quantity)) * 100;
+          const rMultiple = calculateRMultiple(pnl, trade.riskAmount);
 
-          const pnlPercent = (pnl / (trade.entry_price * trade.quantity)) * 100;
-          const rMultiple =
-            trade.risk_amount && trade.risk_amount > 0
-              ? pnl / trade.risk_amount
-              : 0;
-
-          const stateTaxRate = trade.state_tax_rate || 0;
-          const federalTaxRate = trade.federal_tax_rate || 0;
-          const combinedTaxRate = (stateTaxRate + federalTaxRate) / 100;
-          const taxAmount =
-            Math.round((pnl > 0 ? pnl * combinedTaxRate : 0) * 100) / 100;
+          const taxAmount = calculateTaxAmount(
+            pnl,
+            trade.stateTaxRate || 0,
+            trade.federalTaxRate || 0
+          );
 
           const positionSize =
-            trade.position_size || trade.entry_price * trade.quantity;
-          const marginRate = (trade.margin_interest_rate || 0) / 100;
-          const entryDate = new Date(trade.entry_time);
+            trade.positionSize || trade.entryPrice * trade.quantity;
 
           // Use custom close date if provided, otherwise use current time
           const exitDate = additionalData.closeDate
             ? new Date(additionalData.closeDate)
             : new Date();
 
-          const daysHeld = Math.max(
-            1,
-            Math.ceil((exitDate - entryDate) / (1000 * 60 * 60 * 24))
+          const daysHeld = calculateDaysHeld(trade.entryTime, exitDate);
+          const marginInterest = calculateMarginInterest(
+            positionSize,
+            trade.marginInterestRate || 0,
+            daysHeld
           );
-          const marginInterest =
-            Math.round(((positionSize * marginRate) / 360) * daysHeld * 100) /
-            100;
 
-          const netProfit =
-            Math.round((pnl - taxAmount - marginInterest) * 100) / 100;
+          const netProfit = calculateNetProfit(pnl, taxAmount, marginInterest);
 
           const now = new Date().toISOString();
           const exitTime = additionalData.closeDate
@@ -201,12 +202,12 @@ class Trade {
           UPDATE trades 
           SET 
             status = 'CLOSED',
-            exit_price = ?,
-            profit_loss = ?,
-            tax_amount = ?,
-            margin_interest = ?,
-            exit_time = ?,
-            updated_at = ?
+            exitPrice = ?,
+            profitLoss = ?,
+            taxAmount = ?,
+            marginInterest = ?,
+            exitTime = ?,
+            updatedAt = ?
           WHERE id = ?
         `;
 
@@ -239,16 +240,15 @@ class Trade {
   static calculateMetrics(trade) {
     if (!trade) return null;
 
-    const pnl = trade.profit_loss || 0;
-    const entryValue = trade.entry_price * trade.quantity;
+    const pnl = trade.profitLoss || 0;
+    const entryValue = trade.entryPrice * trade.quantity;
     const pnlPercent = entryValue > 0 ? (pnl / entryValue) * 100 : 0;
-    const rMultiple =
-      trade.risk_amount && trade.risk_amount > 0 ? pnl / trade.risk_amount : 0;
-    const winLoss = pnl > 0 ? "WIN" : pnl < 0 ? "LOSS" : "BREAKEVEN";
+    const rMultiple = calculateRMultiple(pnl, trade.riskAmount);
+    const winLoss = determineWinLoss(pnl);
 
-    const taxAmount = trade.tax_amount || (pnl > 0 ? pnl * 0.25 : 0);
-    const marginInterest = trade.margin_interest || 0;
-    const netProfit = pnl - taxAmount - marginInterest;
+    const taxAmount = trade.taxAmount || calculateTaxAmount(pnl, 0, 25);
+    const marginInterest = trade.marginInterest || 0;
+    const netProfit = calculateNetProfit(pnl, taxAmount, marginInterest);
 
     return {
       pnl,
@@ -258,7 +258,7 @@ class Trade {
       taxAmount,
       marginInterest,
       netProfit,
-      positionSize: trade.position_size || trade.entry_price * trade.quantity,
+      positionSize: trade.positionSize || trade.entryPrice * trade.quantity,
     };
   }
 
@@ -267,7 +267,7 @@ class Trade {
       const db = getDb();
       console.log("Fetching open positions from database...");
       db.all(
-        'SELECT * FROM trades WHERE status = "OPEN" ORDER BY entry_time DESC',
+        'SELECT * FROM trades WHERE status = "OPEN" ORDER BY entryTime DESC',
         (err, rows) => {
           if (err) {
             console.error("Error fetching open positions:", err);
@@ -285,7 +285,7 @@ class Trade {
       const db = getDb();
       console.log("Fetching closed trades from database...");
       db.all(
-        'SELECT * FROM trades WHERE status = "CLOSED" ORDER BY exit_time DESC',
+        'SELECT * FROM trades WHERE status = "CLOSED" ORDER BY exitTime DESC',
         (err, rows) => {
           if (err) {
             console.error("Error fetching closed trades:", err);

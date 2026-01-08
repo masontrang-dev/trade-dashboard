@@ -55,15 +55,7 @@ router.get("/open", async (req, res) => {
         batch.map(async (trade) => {
           try {
             console.log(`Processing trade ${trade.id} (${trade.symbol})...`);
-            const pnl = await marketData.calculatePnL(trade).catch((err) => {
-              console.error(
-                `Error calculating PnL for trade ${trade.id}:`,
-                err.message
-              );
-              return null;
-            });
-
-            const current_price = await marketData
+            const currentPrice = await marketData
               .getStockPrice(trade.symbol)
               .catch((err) => {
                 console.error(
@@ -74,28 +66,39 @@ router.get("/open", async (req, res) => {
               });
 
             console.log(
-              `Trade ${trade.id} processed - PnL: ${pnl}, Current Price: ${current_price}`
+              `Trade ${trade.id} processed - Current Price: ${currentPrice}`
             );
 
+            // Exclude fields that are only relevant for closed trades
+            const {
+              exitPrice,
+              profitLoss,
+              taxAmount,
+              marginInterest,
+              ...openTradeData
+            } = trade;
+
             return {
-              ...trade,
-              current_price,
-              pnl: pnl || 0,
-              pnl_percent:
-                pnl !== null && trade.entry_price && trade.quantity
-                  ? (pnl / (trade.entry_price * trade.quantity)) * 100
-                  : null,
+              ...openTradeData,
+              currentPrice,
             };
           } catch (error) {
             console.error(
               `Unexpected error processing trade ${trade.id}:`,
               error
             );
+            // Exclude fields that are only relevant for closed trades
+            const {
+              exitPrice,
+              profitLoss,
+              taxAmount,
+              marginInterest,
+              ...openTradeData
+            } = trade;
+
             return {
-              ...trade,
-              current_price: trade.entry_price, // Fallback to entry price
-              pnl: 0,
-              pnl_percent: 0,
+              ...openTradeData,
+              currentPrice: trade.entryPrice, // Fallback to entry price
               error: error.message,
             };
           }
@@ -126,12 +129,12 @@ router.get("/:id", async (req, res) => {
     if (trade.status === "OPEN") {
       try {
         const pnl = await marketData.calculatePnL(trade);
-        trade.current_price = await marketData
+        trade.currentPrice = await marketData
           .getStockPrice(trade.symbol)
           .catch(() => null);
         trade.pnl = pnl;
-        trade.pnl_percent = trade.entry_price
-          ? (pnl / (trade.entry_price * trade.quantity)) * 100
+        trade.pnlPercent = trade.entryPrice
+          ? (pnl / (trade.entryPrice * trade.quantity)) * 100
           : null;
       } catch (error) {
         console.error(
@@ -154,15 +157,16 @@ router.post("/", async (req, res) => {
       symbol,
       type,
       quantity,
-      entry_price,
-      stop_loss,
-      take_profit,
+      entryPrice,
+      stopLoss,
+      targetPrice1,
+      targetPrice2,
       notes,
     } = req.body;
 
-    if (!symbol || !type || !quantity || !entry_price) {
+    if (!symbol || !type || !quantity || !entryPrice) {
       return res.status(400).json({
-        error: "Missing required fields: symbol, type, quantity, entry_price",
+        error: "Missing required fields: symbol, type, quantity, entryPrice",
       });
     }
 
@@ -176,9 +180,10 @@ router.post("/", async (req, res) => {
       symbol,
       type,
       quantity,
-      entry_price,
-      stop_loss,
-      take_profit,
+      entryPrice,
+      stopLoss,
+      targetPrice1,
+      targetPrice2,
       notes,
     });
 
@@ -200,7 +205,7 @@ router.put("/:id", async (req, res) => {
 // Close a trade with exit price
 router.post("/:id/close", async (req, res) => {
   try {
-    const { exitPrice, tax_amount, margin_interest, closeDate } = req.body;
+    const { exitPrice, taxAmount, marginInterest, closeDate } = req.body;
 
     if (exitPrice === undefined || exitPrice === null) {
       return res.status(400).json({ error: "Exit price is required" });
@@ -211,10 +216,8 @@ router.post("/:id/close", async (req, res) => {
     }
 
     const additionalData = {
-      tax_amount: tax_amount ? parseFloat(tax_amount) : undefined,
-      margin_interest: margin_interest
-        ? parseFloat(margin_interest)
-        : undefined,
+      taxAmount: taxAmount ? parseFloat(taxAmount) : undefined,
+      marginInterest: marginInterest ? parseFloat(marginInterest) : undefined,
       closeDate: closeDate || undefined,
     };
 
@@ -277,7 +280,7 @@ router.post("/switch-mode", async (req, res) => {
     // Update trading mode in app_settings
     await new Promise((resolve, reject) => {
       db.run(
-        "UPDATE app_settings SET trading_mode = ?, updated_at = ? WHERE id = 1",
+        "UPDATE app_settings SET tradingMode = ?, updatedAt = ? WHERE id = 1",
         [mode, new Date().toISOString()],
         (err) => {
           if (err) reject(err);
@@ -320,11 +323,11 @@ router.post("/switch-dev-mode", async (req, res) => {
     // Switch database
     await switchDatabase(devMode);
 
-    // Update dev_mode in app_settings
+    // Update devMode in app_settings
     const db = getDb();
     await new Promise((resolve, reject) => {
       db.run(
-        "UPDATE app_settings SET dev_mode = ?, updated_at = ? WHERE id = 1",
+        "UPDATE app_settings SET devMode = ?, updatedAt = ? WHERE id = 1",
         [devMode ? 1 : 0, new Date().toISOString()],
         (err) => {
           if (err) reject(err);
@@ -361,7 +364,7 @@ router.get("/mode-settings", async (req, res) => {
     });
 
     res.json({
-      tradingMode: settings?.trading_mode || "SWING",
+      tradingMode: settings?.tradingMode || "SWING",
       devMode: isDevMode(),
     });
   } catch (error) {
