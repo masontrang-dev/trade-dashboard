@@ -1,6 +1,6 @@
 <template>
   <div class="trade-form">
-    <h2>New Trade Setup</h2>
+    <h2>Trade Entry</h2>
     <form @submit.prevent="submitTrade">
       <div class="form-row">
         <div class="form-group">

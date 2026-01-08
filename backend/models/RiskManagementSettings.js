@@ -1,4 +1,4 @@
-const db = require("./database");
+const { getDb } = require("./database");
 
 // Map between frontend camelCase and database snake_case field names
 const fieldMap = {
@@ -25,6 +25,7 @@ const reverseFieldMap = Object.entries(fieldMap).reduce(
 class RiskManagementSettings {
   static async get() {
     return new Promise((resolve, reject) => {
+      const db = getDb();
       db.get(
         "SELECT * FROM risk_management_settings ORDER BY id ASC LIMIT 1",
         (err, row) => {
@@ -71,6 +72,7 @@ class RiskManagementSettings {
   static async update(settings) {
     console.log("Updating settings with:", settings);
     return new Promise((resolve, reject) => {
+      const db = getDb();
       const setClauses = [];
       const values = [];
 

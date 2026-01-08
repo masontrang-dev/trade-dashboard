@@ -4,13 +4,25 @@
       <div class="header-top">
         <h1>{{ tradingMode === "DAY" ? "Day" : "Swing" }} Trading Dashboard</h1>
         <div class="header-controls">
-          <ModeSelector
-            :trading-mode="tradingMode"
-            :dev-mode="devMode"
-            :open-trades-count="activeTrades.length"
-            @trading-mode-changed="handleTradingModeChange"
-            @dev-mode-changed="handleDevModeChange"
-          />
+          <button @click="openSettings" class="settings-btn" title="Settings">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle cx="12" cy="12" r="3"></circle>
+              <path
+                d="M12 1v6M12 17v6M4.22 4.22l4.24 4.24M15.54 15.54l4.24 4.24M1 12h6M17 12h6M4.22 19.78l4.24-4.24M15.54 8.46l4.24-4.24"
+              ></path>
+            </svg>
+            Settings
+          </button>
           <RToggle @toggle-changed="handleRToggle" />
         </div>
       </div>
@@ -80,13 +92,6 @@
           :federal-tax-rate="federalTaxRate"
           :margin-interest-rate="marginInterestRate"
         />
-        <RiskSettings
-          :max-daily-loss="maxDailyLoss"
-          :max-open-risk="maxOpenRisk"
-          :default-r-size="defaultRSize"
-          :show-r-values="showRValues"
-          @settings-updated="handleRiskSettingsUpdated"
-        />
       </div>
 
       <div class="right-panel">
@@ -104,17 +109,36 @@
         />
       </div>
     </main>
+
+    <SettingsModal
+      :is-open="isSettingsOpen"
+      :trading-mode="tradingMode"
+      :dev-mode="devMode"
+      :max-daily-loss="maxDailyLoss"
+      :max-open-risk="maxOpenRisk"
+      :default-r-size="defaultRSize"
+      :max-positions="maxPositions"
+      :state-tax-rate="stateTaxRate"
+      :federal-tax-rate="federalTaxRate"
+      :margin-interest-rate="marginInterestRate"
+      :enable-alerts="enableAlerts"
+      :show-r-values="showRValues"
+      :open-trades-count="activeTrades.length"
+      @close="closeSettings"
+      @save="handleSettingsSave"
+      @trading-mode-changed="handleTradingModeChange"
+      @dev-mode-changed="handleDevModeChange"
+    />
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from "vue";
 import TradeForm from "./TradeForm.vue";
-import RiskSettings from "./RiskSettings.vue";
 import ActiveTrades from "./ActiveTrades.vue";
 import TradeHistory from "./TradeHistory.vue";
 import RToggle from "./RToggle.vue";
-import ModeSelector from "./ModeSelector.vue";
+import SettingsModal from "./SettingsModal.vue";
 import api from "../services/api";
 
 const maxDailyLoss = ref(500);
@@ -123,6 +147,9 @@ const activeTrades = ref([]);
 const tradeHistory = ref([]);
 const tradingMode = ref("SWING");
 const devMode = ref(false);
+const isSettingsOpen = ref(false);
+const maxPositions = ref(5);
+const enableAlerts = ref(true);
 
 // Load closed trades from API
 const loadClosedTrades = async () => {
@@ -245,6 +272,9 @@ const loadRiskSettings = async () => {
       if (settings.defaultRSize !== undefined) {
         defaultRSize.value = settings.defaultRSize;
       }
+      if (settings.maxPositions !== undefined) {
+        maxPositions.value = settings.maxPositions;
+      }
       if (settings.stateTaxRate !== undefined) {
         stateTaxRate.value = settings.stateTaxRate;
       }
@@ -253,6 +283,9 @@ const loadRiskSettings = async () => {
       }
       if (settings.marginInterestRate !== undefined) {
         marginInterestRate.value = settings.marginInterestRate;
+      }
+      if (settings.enableAlerts !== undefined) {
+        enableAlerts.value = settings.enableAlerts;
       }
     }
   } catch (error) {
@@ -308,11 +341,6 @@ const loadRiskSettings = async () => {
 onMounted(async () => {
   await loadRiskSettings();
   await Promise.all([loadActiveTrades(), loadClosedTrades()]);
-});
-
-// Load settings when component is mounted
-onMounted(() => {
-  loadRiskSettings();
 });
 
 const dailyRiskUsed = computed(() => {
@@ -488,6 +516,70 @@ const handleDevModeChange = async (isDevMode) => {
     alert("Failed to switch dev mode. Please try again.");
   }
 };
+
+const openSettings = () => {
+  isSettingsOpen.value = true;
+};
+
+const closeSettings = () => {
+  isSettingsOpen.value = false;
+};
+
+const handleSettingsSave = async (settings) => {
+  try {
+    const settingsToSave = {
+      maxDailyLoss: settings.maxDailyLoss,
+      maxOpenRisk: settings.maxOpenRisk,
+      maxPositions: settings.maxPositions,
+      defaultRSize: settings.defaultRSize,
+      enableAlerts: settings.enableAlerts,
+      stateTaxRate: settings.stateTaxRate,
+      federalTaxRate: settings.federalTaxRate,
+      marginInterestRate: settings.marginInterestRate,
+    };
+
+    await api.updateRiskSettings(settingsToSave);
+
+    // Update local state
+    if (settings.maxDailyLoss !== undefined) {
+      maxDailyLoss.value = settings.maxDailyLoss;
+    }
+    if (settings.maxOpenRisk !== undefined) {
+      maxOpenRisk.value = settings.maxOpenRisk;
+    }
+    if (settings.defaultRSize !== undefined) {
+      defaultRSize.value = settings.defaultRSize;
+    }
+    if (settings.maxPositions !== undefined) {
+      maxPositions.value = settings.maxPositions;
+    }
+    if (settings.stateTaxRate !== undefined) {
+      stateTaxRate.value = settings.stateTaxRate;
+    }
+    if (settings.federalTaxRate !== undefined) {
+      federalTaxRate.value = settings.federalTaxRate;
+    }
+    if (settings.marginInterestRate !== undefined) {
+      marginInterestRate.value = settings.marginInterestRate;
+    }
+    if (settings.enableAlerts !== undefined) {
+      enableAlerts.value = settings.enableAlerts;
+    }
+
+    // Update local storage as a fallback
+    const currentSettings = {
+      maxDailyLoss: maxDailyLoss.value,
+      maxOpenRisk: maxOpenRisk.value,
+      defaultRSize: defaultRSize.value,
+    };
+    localStorage.setItem("riskSettings", JSON.stringify(currentSettings));
+
+    console.log("Settings saved successfully");
+  } catch (error) {
+    console.error("Failed to save settings:", error);
+    alert("Failed to save settings. Please try again.");
+  }
+};
 </script>
 
 <style scoped>
@@ -513,6 +605,38 @@ const handleDevModeChange = async (isDevMode) => {
   display: flex;
   align-items: center;
   gap: 15px;
+}
+
+.settings-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  background: white;
+  border: 2px solid #e1e8ed;
+  border-radius: 10px;
+  color: #5a6c7d;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.settings-btn:hover {
+  background: #f8f9fa;
+  border-color: #3498db;
+  color: #3498db;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(52, 152, 219, 0.2);
+}
+
+.settings-btn svg {
+  transition: transform 0.3s ease;
+}
+
+.settings-btn:hover svg {
+  transform: rotate(90deg);
 }
 
 .dashboard-header h1 {
