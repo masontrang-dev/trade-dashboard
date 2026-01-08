@@ -1,5 +1,11 @@
 <template>
   <div class="active-trades">
+    <Toast
+      :show="toast.show"
+      :message="toast.message"
+      :type="toast.type"
+      @close="toast.show = false"
+    />
     <h2>Active Trades ({{ trades.length }})</h2>
 
     <div v-if="trades.length === 0" class="no-trades">
@@ -15,11 +21,19 @@
           profitable: currentPnL(trade) > 0,
           losing: currentPnL(trade) < 0,
           closing: closingTradeId === trade.id,
+          editing: editingTradeId === trade.id,
         }"
       >
         <div class="trade-header">
           <div class="ticker-info">
-            <h3>{{ trade.ticker }}</h3>
+            <h3 v-if="editingTradeId !== trade.id">{{ trade.ticker }}</h3>
+            <input
+              v-else
+              v-model="editForm.ticker"
+              type="text"
+              class="inline-edit-input ticker-input"
+              placeholder="Ticker"
+            />
             <span class="trade-type" :class="trade.type">{{
               trade.type ? trade.type.toUpperCase() : ""
             }}</span>
@@ -36,7 +50,23 @@
             >
               {{ expandedTradeId === trade.id ? "▼" : "▶" }}
             </button>
-            <button @click="editTrade(trade)" class="edit-btn">Edit</button>
+            <button
+              v-if="editingTradeId !== trade.id"
+              @click="startEditTrade(trade)"
+              class="edit-btn"
+            >
+              Edit
+            </button>
+            <button v-else @click="cancelEdit" class="cancel-edit-btn">
+              Cancel
+            </button>
+            <button
+              v-if="editingTradeId === trade.id"
+              @click="saveTradeEdit"
+              class="save-edit-btn"
+            >
+              Save
+            </button>
             <button
               @click="toggleCloseTrade(trade)"
               class="close-btn"
@@ -52,9 +82,18 @@
           <div class="detail-row">
             <div class="detail-item">
               <span class="label">Entry:</span>
-              <span class="value">
+              <span v-if="editingTradeId !== trade.id" class="value">
                 ${{ trade.entryPrice ? trade.entryPrice.toFixed(2) : "0.00" }}
               </span>
+              <input
+                v-else
+                v-model.number="editForm.entryPrice"
+                type="number"
+                step="0.01"
+                min="0.01"
+                class="inline-edit-input"
+                placeholder="Entry Price"
+              />
             </div>
             <div class="detail-item">
               <span class="label">Current:</span>
@@ -72,29 +111,61 @@
             </div>
             <div class="detail-item">
               <span class="label">Stop:</span>
-              <span class="value">
+              <span v-if="editingTradeId !== trade.id" class="value">
                 ${{ trade.stopLoss ? trade.stopLoss.toFixed(2) : "0.00" }}
               </span>
+              <input
+                v-else
+                v-model.number="editForm.stopLoss"
+                type="number"
+                step="0.01"
+                min="0.01"
+                class="inline-edit-input"
+                placeholder="Stop Loss"
+              />
             </div>
           </div>
 
-          <!-- Collapsible Details Section -->
+          <!-- Collapsible Details Section (Auto-expanded in edit mode) -->
           <transition name="expand">
-            <div v-if="expandedTradeId === trade.id" class="expanded-details">
+            <div
+              v-if="expandedTradeId === trade.id || editingTradeId === trade.id"
+              class="expanded-details"
+            >
               <div class="detail-row">
                 <div class="detail-item">
                   <span class="label">Shares:</span>
-                  <span class="value">{{ trade.shares }}</span>
+                  <span v-if="editingTradeId !== trade.id" class="value">{{
+                    trade.shares
+                  }}</span>
+                  <input
+                    v-else
+                    v-model.number="editForm.shares"
+                    type="number"
+                    step="1"
+                    min="1"
+                    class="inline-edit-input"
+                    placeholder="Shares"
+                  />
                 </div>
                 <div class="detail-item">
                   <span class="label">Position Size:</span>
-                  <span class="value">
+                  <span v-if="editingTradeId !== trade.id" class="value">
                     ${{ (trade.entryPrice * trade.shares).toFixed(2) }}
                   </span>
+                  <input
+                    v-else
+                    v-model.number="editForm.position_size"
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    class="inline-edit-input"
+                    placeholder="Position Size"
+                  />
                 </div>
                 <div class="detail-item">
                   <span class="label">Risk:</span>
-                  <span class="value">
+                  <span v-if="editingTradeId !== trade.id" class="value">
                     <template v-if="showRValues">
                       {{
                         (trade.riskAmount ? riskAmountR(trade) : 0).toFixed(2)
@@ -113,27 +184,93 @@
                       }}
                     </template>
                   </span>
+                  <input
+                    v-else
+                    v-model.number="editForm.riskAmount"
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    class="inline-edit-input"
+                    placeholder="Risk Amount"
+                  />
                 </div>
               </div>
 
               <div class="detail-row">
                 <div class="detail-item">
                   <span class="label">Target 1:</span>
-                  <span class="value"
+                  <span v-if="editingTradeId !== trade.id" class="value"
                     >${{ trade.target1?.toFixed(2) || "-" }}</span
                   >
+                  <input
+                    v-else
+                    v-model.number="editForm.target1"
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    class="inline-edit-input"
+                    placeholder="Target 1"
+                  />
                 </div>
                 <div class="detail-item">
                   <span class="label">Target 2:</span>
-                  <span class="value"
+                  <span v-if="editingTradeId !== trade.id" class="value"
                     >${{ trade.target2?.toFixed(2) || "-" }}</span
                   >
+                  <input
+                    v-else
+                    v-model.number="editForm.target2"
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    class="inline-edit-input"
+                    placeholder="Target 2"
+                  />
                 </div>
               </div>
 
-              <div v-if="trade.notes" class="trade-notes">
+              <!-- Edit mode: Additional fields -->
+              <div v-if="editingTradeId === trade.id" class="detail-row">
+                <div class="detail-item">
+                  <span class="label">Strategy:</span>
+                  <input
+                    v-model="editForm.strategy"
+                    type="text"
+                    class="inline-edit-input"
+                    placeholder="Strategy name"
+                  />
+                </div>
+                <div class="detail-item">
+                  <span class="label">Entry Date:</span>
+                  <input
+                    v-model="editForm.entry_time"
+                    type="datetime-local"
+                    class="inline-edit-input"
+                  />
+                </div>
+                <div class="detail-item">
+                  <span class="label">Exit Date:</span>
+                  <input
+                    v-model="editForm.exit_time"
+                    type="datetime-local"
+                    class="inline-edit-input"
+                  />
+                </div>
+              </div>
+
+              <div
+                v-if="trade.notes || editingTradeId === trade.id"
+                class="trade-notes"
+              >
                 <span class="label">Notes:</span>
-                <p>{{ trade.notes }}</p>
+                <p v-if="editingTradeId !== trade.id">{{ trade.notes }}</p>
+                <textarea
+                  v-else
+                  v-model="editForm.notes"
+                  rows="3"
+                  class="inline-edit-textarea"
+                  placeholder="Add trade notes..."
+                ></textarea>
               </div>
             </div>
           </transition>
@@ -307,157 +444,13 @@
         </div>
       </div>
     </div>
-
-    <!-- Edit Trade Modal -->
-    <div v-if="editingTrade" class="modal-overlay" @click="closeEditModal">
-      <div class="modal-content" @click.stop>
-        <h3>Edit Trade - {{ editingTrade.ticker }}</h3>
-        <form @submit.prevent="saveTradeEdit">
-          <div class="form-row">
-            <div class="form-group">
-              <label>Ticker</label>
-              <input
-                v-model="editingTrade.ticker"
-                type="text"
-                placeholder="Ticker symbol"
-              />
-            </div>
-            <div class="form-group">
-              <label>Strategy</label>
-              <input
-                v-model="editingTrade.strategy"
-                type="text"
-                placeholder="Strategy name"
-              />
-            </div>
-          </div>
-
-          <div class="form-row">
-            <div class="form-group">
-              <label>Entry Date</label>
-              <input v-model="editingTrade.entry_time" type="datetime-local" />
-            </div>
-            <div class="form-group">
-              <label>Exit Date</label>
-              <input v-model="editingTrade.exit_time" type="datetime-local" />
-            </div>
-          </div>
-
-          <div class="form-row">
-            <div class="form-group">
-              <label>Entry Price</label>
-              <input
-                v-model.number="editingTrade.entryPrice"
-                type="number"
-                step="0.01"
-                min="0.01"
-                placeholder="Entry price"
-              />
-            </div>
-            <div class="form-group">
-              <label>Stop Price</label>
-              <input
-                v-model.number="editingTrade.stopLoss"
-                type="number"
-                step="0.01"
-                min="0.01"
-                placeholder="Stop loss"
-              />
-            </div>
-          </div>
-
-          <div class="form-row">
-            <div class="form-group">
-              <label>Target 1</label>
-              <input
-                v-model.number="editingTrade.target1"
-                type="number"
-                step="0.01"
-                min="0.01"
-                placeholder="Target 1"
-              />
-            </div>
-            <div class="form-group">
-              <label>Target 2</label>
-              <input
-                v-model.number="editingTrade.target2"
-                type="number"
-                step="0.01"
-                min="0.01"
-                placeholder="Target 2"
-              />
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label>Exit Price</label>
-            <input
-              v-model.number="editingTrade.exit_price"
-              type="number"
-              step="0.01"
-              min="0.01"
-              placeholder="Exit price"
-            />
-          </div>
-
-          <div class="form-row">
-            <div class="form-group">
-              <label>Shares</label>
-              <input
-                v-model.number="editingTrade.shares"
-                type="number"
-                step="1"
-                min="1"
-                placeholder="Number of shares"
-              />
-            </div>
-            <div class="form-group">
-              <label>Position Size ($)</label>
-              <input
-                v-model.number="editingTrade.position_size"
-                type="number"
-                step="0.01"
-                min="0.01"
-                placeholder="Position size"
-              />
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label>Total Risk ($R)</label>
-            <input
-              v-model.number="editingTrade.riskAmount"
-              type="number"
-              step="0.01"
-              min="0.01"
-              placeholder="Total risk amount"
-            />
-          </div>
-
-          <div class="form-group">
-            <label>Notes</label>
-            <textarea
-              v-model="editingTrade.notes"
-              rows="3"
-              placeholder="Update trade notes..."
-            ></textarea>
-          </div>
-
-          <div class="modal-actions">
-            <button type="button" @click="closeEditModal" class="cancel-btn">
-              Cancel
-            </button>
-            <button type="submit" class="save-btn">Save Changes</button>
-          </div>
-        </form>
-      </div>
-    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, computed } from "vue";
 import apiService from "../services/api";
+import Toast from "./Toast.vue";
 
 const props = defineProps({
   trades: {
@@ -476,13 +469,28 @@ const props = defineProps({
 
 const emit = defineEmits(["trade-closed", "trade-updated"]);
 
-const editingTrade = ref(null);
+const editingTradeId = ref(null);
+const editForm = ref({});
 const closingTradeId = ref(null);
 const expandedTradeId = ref(null);
 const closeForm = ref({
   exitPrice: null,
   closeDate: null,
 });
+
+const toast = ref({
+  show: false,
+  message: "",
+  type: "success",
+});
+
+const showToast = (message, type = "success") => {
+  toast.value = {
+    show: true,
+    message,
+    type,
+  };
+};
 
 const currentPnL = computed(() => (trade) => {
   if (!trade?.current_price) return 0;
@@ -528,37 +536,85 @@ const progressToTarget = computed(() => (trade, target) => {
   return Math.min(100, Math.max(0, (currentProgress / totalRange) * 100));
 });
 
-const editTrade = (trade) => {
-  editingTrade.value = { ...trade };
+const formatDateTimeForInput = (dateString) => {
+  if (!dateString) return "";
+  const date = new Date(dateString);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
 };
 
-const closeEditModal = () => {
-  editingTrade.value = null;
+const startEditTrade = (trade) => {
+  editingTradeId.value = trade.id;
+  editForm.value = {
+    ticker: trade.ticker,
+    strategy: trade.strategy || "",
+    entryPrice: trade.entryPrice,
+    stopLoss: trade.stopLoss,
+    target1: trade.target1,
+    target2: trade.target2,
+    shares: trade.shares,
+    position_size: trade.position_size || trade.entryPrice * trade.shares,
+    riskAmount: trade.riskAmount,
+    notes: trade.notes || "",
+    entry_time: formatDateTimeForInput(trade.entry_time),
+    exit_time: formatDateTimeForInput(trade.exit_time),
+  };
+  // Auto-expand the details section when editing
+  if (expandedTradeId.value !== trade.id) {
+    expandedTradeId.value = trade.id;
+  }
+};
+
+const cancelEdit = () => {
+  editingTradeId.value = null;
+  editForm.value = {};
 };
 
 const saveTradeEdit = async () => {
   try {
     const updateData = {
-      symbol: editingTrade.value.ticker,
-      strategy: editingTrade.value.strategy,
-      entry_price: editingTrade.value.entryPrice,
-      stop_loss: editingTrade.value.stopLoss,
-      take_profit: editingTrade.value.target1,
-      exit_price: editingTrade.value.exit_price,
-      quantity: editingTrade.value.shares,
-      position_size: editingTrade.value.position_size,
-      risk_amount: editingTrade.value.riskAmount,
-      notes: editingTrade.value.notes,
-      entry_time: editingTrade.value.entry_time,
-      exit_time: editingTrade.value.exit_time,
+      symbol: editForm.value.ticker,
+      strategy: editForm.value.strategy,
+      entry_price: editForm.value.entryPrice,
+      stop_loss: editForm.value.stopLoss,
+      take_profit: editForm.value.target1,
+      quantity: editForm.value.shares,
+      position_size: editForm.value.position_size,
+      risk_amount: editForm.value.riskAmount,
+      notes: editForm.value.notes,
+      entry_time: editForm.value.entry_time,
+      exit_time: editForm.value.exit_time,
     };
 
-    await apiService.updateTrade(editingTrade.value.id, updateData);
-    emit("trade-updated", editingTrade.value);
-    closeEditModal();
+    await apiService.updateTrade(editingTradeId.value, updateData);
+
+    // Update the local trade object
+    const updatedTrade = {
+      id: editingTradeId.value,
+      ticker: editForm.value.ticker,
+      strategy: editForm.value.strategy,
+      entryPrice: editForm.value.entryPrice,
+      stopLoss: editForm.value.stopLoss,
+      target1: editForm.value.target1,
+      target2: editForm.value.target2,
+      shares: editForm.value.shares,
+      position_size: editForm.value.position_size,
+      riskAmount: editForm.value.riskAmount,
+      notes: editForm.value.notes,
+      entry_time: editForm.value.entry_time,
+      exit_time: editForm.value.exit_time,
+    };
+
+    emit("trade-updated", updatedTrade);
+    cancelEdit();
+    showToast("Trade updated successfully!", "success");
   } catch (error) {
     console.error("Error updating trade:", error);
-    alert(`Error updating trade: ${error.message}`);
+    showToast(`Error updating trade: ${error.message}`, "error");
   }
 };
 
@@ -655,10 +711,10 @@ const confirmCloseTrade = async (trade) => {
     };
 
     emit("trade-closed");
-    alert(`Trade closed successfully!`);
+    showToast("Trade closed successfully!", "success");
   } catch (error) {
     console.error("Error closing trade:", error);
-    alert(`Error closing trade: ${error.message}`);
+    showToast(`Error closing trade: ${error.message}`, "error");
   }
 };
 </script>
@@ -1003,96 +1059,107 @@ const confirmCloseTrade = async (trade) => {
   opacity: 1;
 }
 
-/* Modal Styles */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.modal-content {
-  background: white;
-  border-radius: 12px;
-  padding: 25px;
-  max-width: 500px;
-  width: 90%;
-  max-height: 80vh;
-  overflow-y: auto;
-}
-
-.modal-content h3 {
-  margin: 0 0 20px 0;
-  color: #2c3e50;
-}
-
-.form-group {
-  margin-bottom: 15px;
-}
-
-.form-group label {
-  display: block;
-  margin-bottom: 5px;
-  color: #5a6c7d;
-  font-weight: 500;
-}
-
-.form-group input,
-.form-group textarea {
+/* Modern Inline Edit Styles */
+.inline-edit-input,
+.inline-edit-textarea {
   width: 100%;
-  padding: 10px 12px;
-  border: 2px solid #e1e8ed;
-  border-radius: 8px;
-  font-size: 1rem;
+  padding: 0;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  font-size: inherit;
+  font-weight: inherit;
+  color: #2c3e50;
+  background: transparent;
   box-sizing: border-box;
+  transition: all 0.2s ease;
+  font-family: inherit;
 }
 
-.modal-actions {
-  display: flex;
-  gap: 10px;
-  justify-content: flex-end;
-  margin-top: 20px;
+.inline-edit-input:hover {
+  border-bottom-color: rgba(52, 152, 219, 0.3);
+  background: rgba(52, 152, 219, 0.03);
 }
 
-.cancel-btn,
-.save-btn {
-  padding: 10px 20px;
+.inline-edit-input:focus,
+.inline-edit-textarea:focus {
+  outline: none;
+  border-bottom-color: #3498db;
+  background: rgba(52, 152, 219, 0.05);
+}
+
+.ticker-input {
+  font-size: 1.3rem;
+  font-weight: bold;
+  max-width: 150px;
+  padding: 2px 4px;
+}
+
+.inline-edit-textarea {
+  resize: vertical;
+  min-height: 60px;
+  padding: 8px;
+  border: 1px solid rgba(52, 152, 219, 0.2);
+  border-radius: 6px;
+  background: rgba(52, 152, 219, 0.03);
+}
+
+.inline-edit-textarea:hover {
+  border-color: rgba(52, 152, 219, 0.4);
+  background: rgba(52, 152, 219, 0.05);
+}
+
+.inline-edit-textarea:focus {
+  border-color: #3498db;
+  background: rgba(52, 152, 219, 0.08);
+}
+
+.detail-item .inline-edit-input {
+  font-weight: 600;
+  padding: 4px 6px;
+  border-radius: 4px;
+}
+
+.full-width {
+  grid-column: 1 / -1;
+}
+
+.cancel-edit-btn,
+.save-edit-btn {
+  padding: 6px 12px;
   border: none;
   border-radius: 6px;
-  font-size: 1rem;
+  font-size: 0.85rem;
   cursor: pointer;
   transition: background-color 0.2s ease;
 }
 
-.cancel-btn {
+.cancel-edit-btn {
   background: #95a5a6;
   color: white;
 }
 
-.cancel-btn:hover {
+.cancel-edit-btn:hover {
   background: #7f8c8d;
 }
 
-.save-btn {
+.save-edit-btn {
   background: #27ae60;
   color: white;
 }
 
-.save-btn:hover {
+.save-edit-btn:hover {
   background: #229954;
 }
 
-.form-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 15px;
-  margin-bottom: 15px;
+.trade-card.editing {
+  border-color: #3498db;
+  box-shadow: 0 4px 16px rgba(52, 152, 219, 0.2);
+  background: linear-gradient(
+    to bottom,
+    rgba(52, 152, 219, 0.02) 0%,
+    transparent 100%
+  );
 }
 
 /* Close Trade Inline Fields */
@@ -1189,9 +1256,6 @@ const confirmCloseTrade = async (trade) => {
 }
 
 @media (max-width: 768px) {
-  .form-row {
-    grid-template-columns: 1fr;
-  }
   .detail-row {
     grid-template-columns: 1fr;
     gap: 10px;

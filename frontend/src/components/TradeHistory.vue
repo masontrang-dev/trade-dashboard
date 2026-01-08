@@ -1,6 +1,27 @@
 <template>
   <div class="trade-history">
-    <h2>Trade History</h2>
+    <Toast
+      :show="toast.show"
+      :message="toast.message"
+      :type="toast.type"
+      @close="toast.show = false"
+    />
+    <div class="header-row">
+      <h2>Trade History</h2>
+      <div class="header-actions" v-if="history.length > 0">
+        <button v-if="!editMode" @click="enterEditMode" class="edit-mode-btn">
+          Edit
+        </button>
+        <template v-else>
+          <button @click="saveAllChanges" class="save-all-btn">
+            ✓ Save All
+          </button>
+          <button @click="cancelEditMode" class="cancel-all-btn">
+            ✕ Cancel
+          </button>
+        </template>
+      </div>
+    </div>
 
     <div v-if="history.length === 0" class="no-history">
       <p>No completed trades yet. Your trading history will appear here.</p>
@@ -53,7 +74,7 @@
       </div>
 
       <!-- Filter Controls -->
-      <div class="filter-controls">
+      <div class="filter-controls" :class="{ 'edit-mode-active': editMode }">
         <select v-model="filterPeriod" @change="filterTrades">
           <option value="all">All Time</option>
           <option value="today">Today</option>
@@ -97,21 +118,86 @@
               :class="{
                 profitable: trade.profitLoss > 0,
                 losing: trade.profitLoss < 0,
+                'edit-mode-row': editMode,
               }"
               :title="trade.notes || ''"
             >
-              <td>{{ formatDate(trade.entryDate) }}</td>
-              <td>{{ formatDate(trade.closeDate) }}</td>
-              <td class="ticker">{{ trade.ticker }}</td>
-              <td>{{ trade.strategy || "-" }}</td>
+              <td>
+                <span v-if="!editMode">{{ formatDate(trade.entryDate) }}</span>
+                <input
+                  v-else
+                  v-model="editedTrades[trade.id].entryDate"
+                  type="datetime-local"
+                  class="table-edit-input"
+                />
+              </td>
+              <td>
+                <span v-if="!editMode">{{ formatDate(trade.closeDate) }}</span>
+                <input
+                  v-else
+                  v-model="editedTrades[trade.id].closeDate"
+                  type="datetime-local"
+                  class="table-edit-input"
+                />
+              </td>
+              <td class="ticker">
+                <span v-if="!editMode">{{ trade.ticker }}</span>
+                <input
+                  v-else
+                  v-model="editedTrades[trade.id].ticker"
+                  type="text"
+                  class="table-edit-input ticker-input"
+                />
+              </td>
+              <td>
+                <span v-if="!editMode">{{ trade.strategy || "-" }}</span>
+                <input
+                  v-else
+                  v-model="editedTrades[trade.id].strategy"
+                  type="text"
+                  class="table-edit-input"
+                  placeholder="Strategy"
+                />
+              </td>
               <td>
                 <span class="trade-type" :class="trade.type">
                   {{ trade.type.toUpperCase() }}
                 </span>
               </td>
-              <td>${{ trade.entryPrice.toFixed(2) }}</td>
-              <td>${{ trade.exitPrice?.toFixed(2) || "-" }}</td>
-              <td>{{ trade.quantity || trade.shares || 0 }}</td>
+              <td>
+                <span v-if="!editMode">${{ trade.entryPrice.toFixed(2) }}</span>
+                <input
+                  v-else
+                  v-model.number="editedTrades[trade.id].entryPrice"
+                  type="number"
+                  step="0.01"
+                  class="table-edit-input price-input"
+                />
+              </td>
+              <td>
+                <span v-if="!editMode"
+                  >${{ trade.exitPrice?.toFixed(2) || "-" }}</span
+                >
+                <input
+                  v-else
+                  v-model.number="editedTrades[trade.id].exitPrice"
+                  type="number"
+                  step="0.01"
+                  class="table-edit-input price-input"
+                />
+              </td>
+              <td>
+                <span v-if="!editMode">{{
+                  trade.quantity || trade.shares || 0
+                }}</span>
+                <input
+                  v-else
+                  v-model.number="editedTrades[trade.id].quantity"
+                  type="number"
+                  step="1"
+                  class="table-edit-input shares-input"
+                />
+              </td>
               <td
                 class="pnl"
                 :class="{
@@ -210,6 +296,8 @@
 
 <script setup>
 import { ref, computed, watch } from "vue";
+import Toast from "./Toast.vue";
+import api from "../services/api";
 
 const props = defineProps({
   history: {
@@ -229,6 +317,22 @@ const props = defineProps({
 const filterPeriod = ref("all");
 const filterType = ref("all");
 const filteredHistory = ref([]);
+const editMode = ref(false);
+const editedTrades = ref({});
+
+const toast = ref({
+  show: false,
+  message: "",
+  type: "success",
+});
+
+const showToast = (message, type = "success") => {
+  toast.value = {
+    show: true,
+    message,
+    type,
+  };
+};
 
 // Statistics
 const totalTrades = computed(() => props.history.length);
@@ -371,6 +475,69 @@ const calculateDuration = (startDate, endDate) => {
   return `${diffDays} days`;
 };
 
+const formatDateTimeForInput = (dateString) => {
+  if (!dateString) return "";
+  const date = new Date(dateString);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+};
+
+const enterEditMode = () => {
+  editMode.value = true;
+  // Create a copy of all trades for editing
+  editedTrades.value = {};
+  filteredHistory.value.forEach((trade) => {
+    editedTrades.value[trade.id] = {
+      ticker: trade.ticker,
+      strategy: trade.strategy || "",
+      entryPrice: trade.entryPrice,
+      exitPrice: trade.exitPrice,
+      quantity: trade.quantity || trade.shares,
+      entryDate: formatDateTimeForInput(trade.entryDate),
+      closeDate: formatDateTimeForInput(trade.closeDate),
+    };
+  });
+};
+
+const cancelEditMode = () => {
+  editMode.value = false;
+  editedTrades.value = {};
+};
+
+const saveAllChanges = async () => {
+  try {
+    const updates = Object.keys(editedTrades.value).map(async (tradeId) => {
+      const edited = editedTrades.value[tradeId];
+      const updateData = {
+        symbol: edited.ticker,
+        strategy: edited.strategy,
+        entry_price: edited.entryPrice,
+        exit_price: edited.exitPrice,
+        quantity: edited.quantity,
+        entry_time: edited.entryDate,
+        exit_time: edited.closeDate,
+      };
+      return api.updateTrade(tradeId, updateData);
+    });
+
+    await Promise.all(updates);
+
+    // Refresh the history
+    window.location.reload();
+
+    editMode.value = false;
+    editedTrades.value = {};
+    showToast(`Successfully updated ${updates.length} trade(s)`, "success");
+  } catch (error) {
+    console.error("Error updating trades:", error);
+    showToast(`Error updating trades: ${error.message}`, "error");
+  }
+};
+
 // Initialize filtered history
 filterTrades();
 
@@ -393,10 +560,70 @@ watch(
   border: 1px solid #e1e8ed;
 }
 
+.header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
 .trade-history h2 {
-  margin: 0 0 20px 0;
+  margin: 0;
   color: #2c3e50;
   font-size: 1.5rem;
+}
+
+.header-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.edit-mode-btn,
+.save-all-btn,
+.cancel-all-btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.edit-mode-btn {
+  background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+  color: white;
+  box-shadow: 0 2px 8px rgba(52, 152, 219, 0.3);
+}
+
+.edit-mode-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(52, 152, 219, 0.4);
+}
+
+.save-all-btn {
+  background: linear-gradient(135deg, #27ae60 0%, #229954 100%);
+  color: white;
+  box-shadow: 0 2px 8px rgba(39, 174, 96, 0.3);
+}
+
+.save-all-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(39, 174, 96, 0.4);
+}
+
+.cancel-all-btn {
+  background: linear-gradient(135deg, #95a5a6 0%, #7f8c8d 100%);
+  color: white;
+  box-shadow: 0 2px 8px rgba(149, 165, 166, 0.3);
+}
+
+.cancel-all-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(149, 165, 166, 0.4);
 }
 
 .no-history {
@@ -454,6 +681,12 @@ watch(
   display: flex;
   gap: 15px;
   margin-bottom: 20px;
+  transition: opacity 0.2s ease;
+}
+
+.filter-controls.edit-mode-active {
+  opacity: 0.5;
+  pointer-events: none;
 }
 
 .filter-controls select {
@@ -495,6 +728,60 @@ tr.profitable {
 
 tr.losing {
   background: rgba(231, 76, 60, 0.05);
+}
+
+tr.edit-mode-row {
+  background: linear-gradient(
+    to right,
+    rgba(52, 152, 219, 0.03) 0%,
+    rgba(52, 152, 219, 0.01) 100%
+  );
+  border-left: 3px solid #3498db;
+}
+
+tr.edit-mode-row:hover {
+  background: linear-gradient(
+    to right,
+    rgba(52, 152, 219, 0.05) 0%,
+    rgba(52, 152, 219, 0.02) 100%
+  );
+}
+
+.table-edit-input {
+  width: 100%;
+  padding: 4px 6px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  font-size: inherit;
+  font-weight: inherit;
+  color: #2c3e50;
+  background: transparent;
+  box-sizing: border-box;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.table-edit-input:hover {
+  border-bottom-color: rgba(52, 152, 219, 0.3);
+  background: rgba(52, 152, 219, 0.05);
+}
+
+.table-edit-input:focus {
+  outline: none;
+  border-bottom-color: #3498db;
+  background: rgba(52, 152, 219, 0.08);
+}
+
+.ticker-input {
+  font-weight: 600;
+  max-width: 80px;
+}
+
+.price-input,
+.shares-input {
+  text-align: right;
+  max-width: 100px;
 }
 
 .ticker {

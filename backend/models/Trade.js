@@ -45,6 +45,11 @@ class Trade {
         r_size,
       } = tradeData;
 
+      // Round risk_amount to 2 decimal places to avoid floating-point precision issues
+      const roundedRiskAmount = risk_amount
+        ? Math.round(risk_amount * 100) / 100
+        : null;
+
       const sql = `
         INSERT INTO trades (
           symbol, type, quantity, entry_price, stop_loss, 
@@ -62,7 +67,7 @@ class Trade {
           stop_loss,
           take_profit,
           notes || null,
-          risk_amount || null,
+          roundedRiskAmount,
           r_size || null,
         ],
         function (err) {
@@ -83,8 +88,13 @@ class Trade {
 
       Object.keys(tradeData).forEach((key) => {
         if (tradeData[key] !== undefined) {
+          // Round risk_amount to 2 decimal places to avoid floating-point precision issues
+          const value =
+            key === "risk_amount" && tradeData[key] !== null
+              ? Math.round(tradeData[key] * 100) / 100
+              : tradeData[key];
           fields.push(`${key} = ?`);
-          values.push(tradeData[key]);
+          values.push(value);
         }
       });
 
@@ -138,6 +148,9 @@ class Trade {
             pnl = (trade.entry_price - exitPrice) * trade.quantity;
           }
 
+          // Round all calculated values to 2 decimal places
+          pnl = Math.round(pnl * 100) / 100;
+
           const pnlPercent = (pnl / (trade.entry_price * trade.quantity)) * 100;
           const rMultiple =
             trade.risk_amount && trade.risk_amount > 0
@@ -147,7 +160,8 @@ class Trade {
           const stateTaxRate = trade.state_tax_rate || 0;
           const federalTaxRate = trade.federal_tax_rate || 0;
           const combinedTaxRate = (stateTaxRate + federalTaxRate) / 100;
-          const taxAmount = pnl > 0 ? pnl * combinedTaxRate : 0;
+          const taxAmount =
+            Math.round((pnl > 0 ? pnl * combinedTaxRate : 0) * 100) / 100;
 
           const positionSize =
             trade.position_size || trade.entry_price * trade.quantity;
@@ -163,9 +177,12 @@ class Trade {
             1,
             Math.ceil((exitDate - entryDate) / (1000 * 60 * 60 * 24))
           );
-          const marginInterest = ((positionSize * marginRate) / 360) * daysHeld;
+          const marginInterest =
+            Math.round(((positionSize * marginRate) / 360) * daysHeld * 100) /
+            100;
 
-          const netProfit = pnl - taxAmount - marginInterest;
+          const netProfit =
+            Math.round((pnl - taxAmount - marginInterest) * 100) / 100;
 
           const now = new Date().toISOString();
           const exitTime = additionalData.closeDate
