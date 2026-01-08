@@ -67,6 +67,9 @@
           @trade-added="handleTradeAdded"
           :show-r-values="showRValues"
           :default-r-size="defaultRSize"
+          :state-tax-rate="stateTaxRate"
+          :federal-tax-rate="federalTaxRate"
+          :margin-interest-rate="marginInterestRate"
         />
         <RiskSettings
           :max-daily-loss="maxDailyLoss"
@@ -117,15 +120,20 @@ const loadClosedTrades = async () => {
       id: trade.id,
       ticker: trade.symbol,
       type: trade.type.toLowerCase(),
+      strategy: trade.strategy,
       entryPrice: trade.entry_price,
       exitPrice: trade.exit_price,
       quantity: trade.quantity,
+      shares: trade.quantity,
       profitLoss: trade.profit_loss,
       entryDate: trade.entry_time,
       closeDate: trade.exit_time,
       notes: trade.notes,
       riskAmount: trade.risk_amount,
       rSize: trade.r_size,
+      taxAmount: trade.tax_amount,
+      marginInterest: trade.margin_interest,
+      positionSize: trade.position_size || trade.entry_price * trade.quantity,
     }));
     console.log("Loaded closed trades:", tradeHistory.value);
   } catch (error) {
@@ -175,15 +183,19 @@ const loadActiveTrades = async () => {
       return {
         id: trade.id,
         ticker: trade.symbol,
+        strategy: trade.strategy,
         type: trade.type,
         shares: trade.quantity || 0,
         entryPrice: trade.entry_price || 0,
         stopLoss: trade.stop_loss || 0,
         target1: trade.take_profit,
+        target2: trade.target_price,
+        position_size: trade.position_size,
         notes: trade.notes || "",
         riskAmount: riskAmount,
         rSize: trade.r_size || defaultRSize.value,
         entry_time: trade.entry_time || new Date().toISOString(),
+        exit_time: trade.exit_time,
         status: trade.status || "OPEN",
         current_price:
           trade.current_price !== undefined && trade.current_price !== null
@@ -204,6 +216,10 @@ const loadActiveTrades = async () => {
   }
 };
 
+const stateTaxRate = ref(0);
+const federalTaxRate = ref(0);
+const marginInterestRate = ref(0);
+
 const loadRiskSettings = async () => {
   try {
     const settings = await api.getRiskSettings();
@@ -216,6 +232,15 @@ const loadRiskSettings = async () => {
       }
       if (settings.defaultRSize !== undefined) {
         defaultRSize.value = settings.defaultRSize;
+      }
+      if (settings.stateTaxRate !== undefined) {
+        stateTaxRate.value = settings.stateTaxRate;
+      }
+      if (settings.federalTaxRate !== undefined) {
+        federalTaxRate.value = settings.federalTaxRate;
+      }
+      if (settings.marginInterestRate !== undefined) {
+        marginInterestRate.value = settings.marginInterestRate;
       }
     }
   } catch (error) {
@@ -299,14 +324,21 @@ const handleTradeAdded = async (trade) => {
     // Prepare the trade data for the API
     const tradeData = {
       symbol: trade.ticker,
+      strategy: trade.strategy || null,
       type: trade.type.toUpperCase(),
       quantity: trade.calculatedShares || trade.shares,
       entry_price: parseFloat(trade.entryPrice),
       stop_loss: parseFloat(trade.stopLoss),
       take_profit: trade.target1 ? parseFloat(trade.target1) : null,
+      target_price: trade.target1 ? parseFloat(trade.target1) : null,
+      position_size:
+        parseFloat(trade.entryPrice) * (trade.calculatedShares || trade.shares),
       notes: trade.notes,
       risk_amount: riskAmount,
       r_size: defaultRSize.value,
+      state_tax_rate: trade.stateTaxRate || 0,
+      federal_tax_rate: trade.federalTaxRate || 0,
+      margin_interest_rate: trade.marginInterestRate || 0,
     };
 
     // Make the API call
@@ -360,6 +392,15 @@ const handleRiskSettingsUpdated = (settings) => {
   }
   if (settings.defaultRSize !== undefined) {
     defaultRSize.value = settings.defaultRSize;
+  }
+  if (settings.stateTaxRate !== undefined) {
+    stateTaxRate.value = settings.stateTaxRate;
+  }
+  if (settings.federalTaxRate !== undefined) {
+    federalTaxRate.value = settings.federalTaxRate;
+  }
+  if (settings.marginInterestRate !== undefined) {
+    marginInterestRate.value = settings.marginInterestRate;
   }
 
   // Update local storage as a fallback

@@ -76,6 +76,50 @@
       </div>
 
       <div class="form-group">
+        <label for="stateTaxRate">State Tax Rate (%)</label>
+        <input
+          id="stateTaxRate"
+          v-model.number="settings.stateTaxRate"
+          type="number"
+          step="0.1"
+          min="0"
+          max="100"
+        />
+        <small
+          >State tax rate applied to profitable trades (e.g., 5.0 for 5%)</small
+        >
+      </div>
+
+      <div class="form-group">
+        <label for="federalTaxRate">Federal Tax Rate (%)</label>
+        <input
+          id="federalTaxRate"
+          v-model.number="settings.federalTaxRate"
+          type="number"
+          step="0.1"
+          min="0"
+          max="100"
+        />
+        <small
+          >Federal tax rate applied to profitable trades (e.g., 22.0 for
+          22%)</small
+        >
+      </div>
+
+      <div class="form-group">
+        <label for="marginInterestRate">Margin Interest Rate (% APR)</label>
+        <input
+          id="marginInterestRate"
+          v-model.number="settings.marginInterestRate"
+          type="number"
+          step="0.01"
+          min="0"
+          max="100"
+        />
+        <small>Annual margin interest rate (e.g., 8.5 for 8.5% APR)</small>
+      </div>
+
+      <div class="form-group">
         <label>
           <input type="checkbox" v-model="settings.enableAlerts" />
           Enable Risk Alerts
@@ -132,6 +176,9 @@ const settings = ref({
   maxPositions: 5,
   defaultRSize: props.defaultRSize,
   enableAlerts: true,
+  stateTaxRate: 0,
+  federalTaxRate: 0,
+  marginInterestRate: 0,
 });
 
 // Watch for prop changes
@@ -164,6 +211,9 @@ const updateSettings = async () => {
       maxPositions: settings.value.maxPositions,
       defaultRSize: settings.value.defaultRSize,
       enableAlerts: settings.value.enableAlerts,
+      stateTaxRate: settings.value.stateTaxRate,
+      federalTaxRate: settings.value.federalTaxRate,
+      marginInterestRate: settings.value.marginInterestRate,
     };
 
     await api.updateRiskSettings(settingsToSave);
@@ -173,6 +223,9 @@ const updateSettings = async () => {
       maxDailyLoss: settings.value.maxDailyLoss,
       maxOpenRisk: settings.value.maxOpenRisk,
       defaultRSize: settings.value.defaultRSize,
+      stateTaxRate: settings.value.stateTaxRate,
+      federalTaxRate: settings.value.federalTaxRate,
+      marginInterestRate: settings.value.marginInterestRate,
     });
 
     // Show success message or handle as needed

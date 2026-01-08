@@ -199,7 +199,7 @@ router.put("/:id", async (req, res) => {
 // Close a trade with exit price
 router.post("/:id/close", async (req, res) => {
   try {
-    const { exitPrice } = req.body;
+    const { exitPrice, tax_amount, margin_interest } = req.body;
 
     if (exitPrice === undefined || exitPrice === null) {
       return res.status(400).json({ error: "Exit price is required" });
@@ -209,7 +209,18 @@ router.post("/:id/close", async (req, res) => {
       return res.status(400).json({ error: "Invalid exit price" });
     }
 
-    const result = await Trade.close(req.params.id, parseFloat(exitPrice));
+    const additionalData = {
+      tax_amount: tax_amount ? parseFloat(tax_amount) : undefined,
+      margin_interest: margin_interest
+        ? parseFloat(margin_interest)
+        : undefined,
+    };
+
+    const result = await Trade.close(
+      req.params.id,
+      parseFloat(exitPrice),
+      additionalData
+    );
 
     if (result.changes === 0) {
       return res
@@ -221,6 +232,11 @@ router.post("/:id/close", async (req, res) => {
       message: "Trade closed successfully",
       tradeId: result.id,
       pnl: result.pnl,
+      pnlPercent: result.pnlPercent,
+      rMultiple: result.rMultiple,
+      taxAmount: result.taxAmount,
+      marginInterest: result.marginInterest,
+      netProfit: result.netProfit,
     });
   } catch (error) {
     console.error("Error closing trade:", error);

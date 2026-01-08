@@ -73,14 +73,21 @@
         <table>
           <thead>
             <tr>
-              <th>Date</th>
+              <th>Entry Date</th>
+              <th>Exit Date</th>
               <th>Ticker</th>
+              <th>Strategy</th>
               <th>Type</th>
               <th>Entry</th>
               <th>Exit</th>
-              <th>P&L</th>
-              <th v-if="!showRValues">R Multiple</th>
-              <th>Duration</th>
+              <th>Shares</th>
+              <th>P&L ($)</th>
+              <th>P&L (%)</th>
+              <th>R-Multiple</th>
+              <th>Win/Loss</th>
+              <th>Tax</th>
+              <th>Margin Int.</th>
+              <th>Net</th>
             </tr>
           </thead>
           <tbody>
@@ -91,18 +98,20 @@
                 profitable: trade.profitLoss > 0,
                 losing: trade.profitLoss < 0,
               }"
+              :title="trade.notes || ''"
             >
+              <td>{{ formatDate(trade.entryDate) }}</td>
               <td>{{ formatDate(trade.closeDate) }}</td>
               <td class="ticker">{{ trade.ticker }}</td>
+              <td>{{ trade.strategy || "-" }}</td>
               <td>
                 <span class="trade-type" :class="trade.type">
                   {{ trade.type.toUpperCase() }}
                 </span>
               </td>
               <td>${{ trade.entryPrice.toFixed(2) }}</td>
-              <td>
-                ${{ trade.currentPrice || trade.target1?.toFixed(2) || "-" }}
-              </td>
+              <td>${{ trade.exitPrice?.toFixed(2) || "-" }}</td>
+              <td>{{ trade.quantity || trade.shares || 0 }}</td>
               <td
                 class="pnl"
                 :class="{
@@ -110,33 +119,63 @@
                   negative: trade.profitLoss < 0,
                 }"
               >
-                <template v-if="showRValues">
-                  {{ tradeRMultiple(trade) > 0 ? "+" : ""
-                  }}{{ tradeRMultiple(trade).toFixed(2) }}R
-                  <small
-                    >({{ trade.profitLoss > 0 ? "+" : "" }}${{
-                      trade.profitLoss.toFixed(2)
-                    }})</small
-                  >
-                </template>
-                <template v-else>
-                  {{ trade.profitLoss > 0 ? "+" : "" }}${{
-                    trade.profitLoss.toFixed(2)
-                  }}
-                </template>
+                {{ trade.profitLoss > 0 ? "+" : "" }}${{
+                  trade.profitLoss.toFixed(2)
+                }}
               </td>
               <td
-                v-if="!showRValues"
-                class="r-multiple"
+                class="pnl-percent"
                 :class="{
-                  positive: trade.rMultiple > 0,
-                  negative: trade.rMultiple < 0,
+                  positive: calculatePnLPercent(trade) > 0,
+                  negative: calculatePnLPercent(trade) < 0,
                 }"
               >
-                {{ trade.rMultiple > 0 ? "+" : ""
-                }}{{ trade.rMultiple?.toFixed(2) || "0.00" }}R
+                {{ calculatePnLPercent(trade) > 0 ? "+" : ""
+                }}{{ calculatePnLPercent(trade).toFixed(2) }}%
               </td>
-              <td>{{ calculateDuration(trade.date, trade.closeDate) }}</td>
+              <td
+                class="r-multiple"
+                :class="{
+                  positive: tradeRMultiple(trade) > 0,
+                  negative: tradeRMultiple(trade) < 0,
+                }"
+              >
+                {{ tradeRMultiple(trade) > 0 ? "+" : ""
+                }}{{ tradeRMultiple(trade).toFixed(2) }}R
+              </td>
+              <td>
+                <span
+                  class="win-loss-badge"
+                  :class="{
+                    win: trade.profitLoss > 0,
+                    loss: trade.profitLoss < 0,
+                    breakeven: trade.profitLoss === 0,
+                  }"
+                >
+                  {{
+                    trade.profitLoss > 0
+                      ? "WIN"
+                      : trade.profitLoss < 0
+                      ? "LOSS"
+                      : "BE"
+                  }}
+                </span>
+              </td>
+              <td class="tax">${{ calculateTax(trade).toFixed(2) }}</td>
+              <td class="margin-interest">
+                ${{ (trade.marginInterest || 0).toFixed(2) }}
+              </td>
+              <td
+                class="net-profit"
+                :class="{
+                  positive: calculateNetProfit(trade) > 0,
+                  negative: calculateNetProfit(trade) < 0,
+                }"
+              >
+                {{ calculateNetProfit(trade) > 0 ? "+" : "" }}${{
+                  calculateNetProfit(trade).toFixed(2)
+                }}
+              </td>
             </tr>
           </tbody>
         </table>
@@ -301,6 +340,24 @@ const formatDate = (dateString) => {
 
 const tradeRMultiple = (trade) => {
   return trade.riskAmount > 0 ? trade.profitLoss / trade.riskAmount : 0;
+};
+
+const calculatePnLPercent = (trade) => {
+  const entryValue = trade.entryPrice * (trade.quantity || trade.shares || 0);
+  return entryValue > 0 ? (trade.profitLoss / entryValue) * 100 : 0;
+};
+
+const calculateTax = (trade) => {
+  if (trade.taxAmount !== undefined && trade.taxAmount !== null) {
+    return trade.taxAmount;
+  }
+  return trade.profitLoss > 0 ? trade.profitLoss * 0.25 : 0;
+};
+
+const calculateNetProfit = (trade) => {
+  const tax = calculateTax(trade);
+  const marginInterest = trade.marginInterest || 0;
+  return trade.profitLoss - tax - marginInterest;
 };
 
 const calculateDuration = (startDate, endDate) => {
@@ -482,8 +539,44 @@ tr.losing {
 }
 
 .pnl.negative,
-.r-multiple.negative {
+.r-multiple.negative,
+.pnl-percent.negative,
+.net-profit.negative {
   color: #e74c3c;
+}
+
+.pnl-percent.positive,
+.net-profit.positive {
+  color: #27ae60;
+}
+
+.win-loss-badge {
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: bold;
+  text-transform: uppercase;
+}
+
+.win-loss-badge.win {
+  background: #d5f4e6;
+  color: #27ae60;
+}
+
+.win-loss-badge.loss {
+  background: #fadbd8;
+  color: #e74c3c;
+}
+
+.win-loss-badge.breakeven {
+  background: #e8e8e8;
+  color: #7f8c8d;
+}
+
+.tax,
+.margin-interest {
+  color: #7f8c8d;
+  font-size: 0.85rem;
 }
 
 .performance-chart {

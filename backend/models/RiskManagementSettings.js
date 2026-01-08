@@ -8,6 +8,9 @@ const fieldMap = {
   maxPositions: "max_open_positions",
   defaultRSize: "max_risk_per_trade",
   enableAlerts: "enable_alerts",
+  stateTaxRate: "state_tax_rate",
+  federalTaxRate: "federal_tax_rate",
+  marginInterestRate: "margin_interest_rate",
 };
 
 // Reverse map for database to frontend
@@ -23,12 +26,13 @@ class RiskManagementSettings {
   static async get() {
     return new Promise((resolve, reject) => {
       db.get(
-        "SELECT * FROM risk_management_settings ORDER BY id DESC LIMIT 1",
+        "SELECT * FROM risk_management_settings ORDER BY id ASC LIMIT 1",
         (err, row) => {
           if (err) {
             reject(err);
           } else {
             if (!row) {
+              console.log("No settings found in database, returning defaults");
               // Return default values if no settings exist
               resolve({
                 maxDailyLoss: 500,
@@ -36,17 +40,27 @@ class RiskManagementSettings {
                 maxPositions: 5,
                 defaultRSize: 50,
                 enableAlerts: true,
+                stateTaxRate: 0,
+                federalTaxRate: 0,
+                marginInterestRate: 0,
               });
               return;
             }
+
+            console.log("Raw database row:", row);
 
             // Convert database field names to frontend field names
             const frontendRow = {};
             Object.entries(row).forEach(([dbField, value]) => {
               const frontendField = reverseFieldMap[dbField] || dbField;
               frontendRow[frontendField] = value;
+              console.log(
+                `Mapping DB field ${dbField} to frontend field ${frontendField} with value:`,
+                value
+              );
             });
 
+            console.log("Final frontend row:", frontendRow);
             resolve(frontendRow);
           }
         }
@@ -95,74 +109,67 @@ class RiskManagementSettings {
       console.log("Executing SQL:", updateSql);
       console.log("With values:", values);
 
-      db.run(
-        updateSql,
-        values,
-        function (err) {
-          if (err) {
-            console.error("Error in update query:", err);
-            // If no rows were updated, try to insert
-            if (this.changes === 0) {
-              console.log("No rows updated, attempting to insert new record");
-              const insertFields = Object.entries(settings)
-                .filter(([key]) => fieldMap[key])
-                .map(([key]) => fieldMap[key]);
+      db.run(updateSql, values, function (err) {
+        const changes = this.changes;
+        console.log("Update callback - changes:", changes, "error:", err);
 
-              if (insertFields.length === 0) {
-                return reject(new Error("No valid fields to insert"));
-              }
+        if (err) {
+          console.error("Error in update query:", err);
+          return reject(err);
+        }
 
-              const insertValues = Object.entries(settings)
-                .filter(([key]) => fieldMap[key])
-                .map(([key]) => settings[key]);
+        // If no rows were updated, try to insert
+        if (changes === 0) {
+          console.log("No rows updated, attempting to insert new record");
+          const insertFields = Object.entries(settings)
+            .filter(([key]) => fieldMap[key])
+            .map(([key]) => fieldMap[key]);
 
-              const placeholders = insertFields.map(() => "?").join(", ");
-              const insertSql = `
-              INSERT INTO risk_management_settings (
-                ${insertFields.join(", ")}, 
-                created_at, 
-                updated_at
-              ) VALUES (${placeholders}, ?, ?)
-            `;
-
-              const insertParams = [
-                ...insertValues,
-                new Date().toISOString(),
-                new Date().toISOString(),
-              ];
-
-              console.log("Executing INSERT SQL:", insertSql);
-              console.log("With values:", insertParams);
-
-              db.run(
-                insertSql,
-                insertParams,
-                function (insertErr) {
-                  if (insertErr) {
-                    console.error("Error in insert query:", insertErr);
-                    return reject(insertErr);
-                  }
-                  console.log("Inserted new record with ID:", this.lastID);
-                  // After insert, fetch and return the new record
-                  this.get((getErr, newSettings) => {
-                    if (getErr) return reject(getErr);
-                    resolve(newSettings);
-                  });
-                }.bind(this)
-              );
-            } else {
-              reject(err);
-            }
-          } else {
-            console.log("Update successful, changes:", this.changes);
-            // After update, fetch and return the updated record
-            this.get((getErr, updatedSettings) => {
-              if (getErr) return reject(getErr);
-              resolve(updatedSettings);
-            });
+          if (insertFields.length === 0) {
+            return reject(new Error("No valid fields to insert"));
           }
-        }.bind(this)
-      );
+
+          const insertValues = Object.entries(settings)
+            .filter(([key]) => fieldMap[key])
+            .map(([key, value]) =>
+              typeof value === "boolean" ? (value ? 1 : 0) : value
+            );
+
+          const placeholders = insertFields.map(() => "?").join(", ");
+          const insertSql = `
+            INSERT INTO risk_management_settings (
+              ${insertFields.join(", ")}, 
+              created_at, 
+              updated_at
+            ) VALUES (${placeholders}, ?, ?)
+          `;
+
+          const insertParams = [
+            ...insertValues,
+            new Date().toISOString(),
+            new Date().toISOString(),
+          ];
+
+          console.log("Executing INSERT SQL:", insertSql);
+          console.log("With values:", insertParams);
+
+          db.run(insertSql, insertParams, function (insertErr) {
+            if (insertErr) {
+              console.error("Error in insert query:", insertErr);
+              return reject(insertErr);
+            }
+            console.log("Inserted new record with ID:", this.lastID);
+
+            // Fetch and return the new record
+            RiskManagementSettings.get().then(resolve).catch(reject);
+          });
+        } else {
+          console.log("Update successful, changes:", changes);
+
+          // Fetch and return the updated record
+          RiskManagementSettings.get().then(resolve).catch(reject);
+        }
+      });
     });
   }
 }

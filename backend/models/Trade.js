@@ -122,9 +122,8 @@ class Trade {
     });
   }
 
-  static async close(id, exitPrice) {
+  static async close(id, exitPrice, additionalData = {}) {
     return new Promise((resolve, reject) => {
-      // First get the trade to calculate P&L
       this.getById(id)
         .then((trade) => {
           if (!trade) {
@@ -132,16 +131,37 @@ class Trade {
             return;
           }
 
-          // Calculate P&L
           let pnl;
           if (trade.type === "LONG") {
             pnl = (exitPrice - trade.entry_price) * trade.quantity;
           } else {
-            // SHORT
             pnl = (trade.entry_price - exitPrice) * trade.quantity;
           }
 
-          // Update the trade with exit price, P&L and close it
+          const pnlPercent = (pnl / (trade.entry_price * trade.quantity)) * 100;
+          const rMultiple =
+            trade.risk_amount && trade.risk_amount > 0
+              ? pnl / trade.risk_amount
+              : 0;
+
+          const stateTaxRate = trade.state_tax_rate || 0;
+          const federalTaxRate = trade.federal_tax_rate || 0;
+          const combinedTaxRate = (stateTaxRate + federalTaxRate) / 100;
+          const taxAmount = pnl > 0 ? pnl * combinedTaxRate : 0;
+
+          const positionSize =
+            trade.position_size || trade.entry_price * trade.quantity;
+          const marginRate = (trade.margin_interest_rate || 0) / 100;
+          const entryDate = new Date(trade.entry_time);
+          const exitDate = new Date();
+          const daysHeld = Math.max(
+            1,
+            Math.ceil((exitDate - entryDate) / (1000 * 60 * 60 * 24))
+          );
+          const marginInterest = ((positionSize * marginRate) / 360) * daysHeld;
+
+          const netProfit = pnl - taxAmount - marginInterest;
+
           const now = new Date().toISOString();
           const sql = `
           UPDATE trades 
@@ -149,21 +169,63 @@ class Trade {
             status = 'CLOSED',
             exit_price = ?,
             profit_loss = ?,
+            tax_amount = ?,
+            margin_interest = ?,
             exit_time = ?,
             updated_at = ?
           WHERE id = ?
         `;
 
-          db.run(sql, [exitPrice, pnl, now, now, id], function (err) {
-            if (err) {
-              reject(err);
-            } else {
-              resolve({ id, changes: this.changes, pnl });
+          db.run(
+            sql,
+            [exitPrice, pnl, taxAmount, marginInterest, now, now, id],
+            function (err) {
+              if (err) {
+                reject(err);
+              } else {
+                resolve({
+                  id,
+                  changes: this.changes,
+                  pnl,
+                  pnlPercent,
+                  rMultiple,
+                  taxAmount,
+                  marginInterest,
+                  netProfit,
+                  daysHeld,
+                });
+              }
             }
-          });
+          );
         })
         .catch(reject);
     });
+  }
+
+  static calculateMetrics(trade) {
+    if (!trade) return null;
+
+    const pnl = trade.profit_loss || 0;
+    const entryValue = trade.entry_price * trade.quantity;
+    const pnlPercent = entryValue > 0 ? (pnl / entryValue) * 100 : 0;
+    const rMultiple =
+      trade.risk_amount && trade.risk_amount > 0 ? pnl / trade.risk_amount : 0;
+    const winLoss = pnl > 0 ? "WIN" : pnl < 0 ? "LOSS" : "BREAKEVEN";
+
+    const taxAmount = trade.tax_amount || (pnl > 0 ? pnl * 0.25 : 0);
+    const marginInterest = trade.margin_interest || 0;
+    const netProfit = pnl - taxAmount - marginInterest;
+
+    return {
+      pnl,
+      pnlPercent,
+      rMultiple,
+      winLoss,
+      taxAmount,
+      marginInterest,
+      netProfit,
+      positionSize: trade.position_size || trade.entry_price * trade.quantity,
+    };
   }
 
   static async getOpenPositions() {

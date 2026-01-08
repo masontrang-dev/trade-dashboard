@@ -32,6 +32,25 @@
         <div class="trade-details">
           <div class="detail-row">
             <div class="detail-item">
+              <span class="label">Entry Date:</span>
+              <span class="value">
+                {{ formatDate(trade.entry_time) }}
+              </span>
+            </div>
+            <div class="detail-item">
+              <span class="label">Strategy:</span>
+              <span class="value">
+                {{ trade.strategy || "N/A" }}
+              </span>
+            </div>
+            <div class="detail-item">
+              <span class="label">Shares:</span>
+              <span class="value">{{ trade.shares }}</span>
+            </div>
+          </div>
+
+          <div class="detail-row">
+            <div class="detail-item">
               <span class="label">Entry:</span>
               <span class="value">
                 ${{ trade.entryPrice ? trade.entryPrice.toFixed(2) : "0.00" }}
@@ -61,28 +80,11 @@
 
           <div class="detail-row">
             <div class="detail-item">
-              <span class="label">P&L:</span>
-              <span
-                class="value"
-                :class="{
-                  'text-green-500': trade.pnl > 0,
-                  'text-red-500': trade.pnl < 0,
-                }"
-              >
-                ${{ trade.pnl !== null ? trade.pnl.toFixed(2) : "--.--" }}
-                <span v-if="trade.pnl_percent !== null" class="text-xs">
-                  ({{ trade.pnl_percent > 0 ? "+" : ""
-                  }}{{ trade.pnl_percent.toFixed(1) }}%)
-                </span>
+              <span class="label">Position Size:</span>
+              <span class="value">
+                ${{ (trade.entryPrice * trade.shares).toFixed(2) }}
               </span>
             </div>
-            <div class="detail-item">
-              <span class="label">Shares:</span>
-              <span class="value">{{ trade.shares }}</span>
-            </div>
-          </div>
-
-          <div class="detail-row">
             <div class="detail-item">
               <span class="label">Risk:</span>
               <span class="value">
@@ -101,12 +103,15 @@
                 </template>
               </span>
             </div>
+          </div>
+
+          <div class="detail-row">
             <div class="detail-item">
-              <span class="label">T1:</span>
+              <span class="label">Target 1:</span>
               <span class="value">${{ trade.target1?.toFixed(2) || "-" }}</span>
             </div>
             <div class="detail-item">
-              <span class="label">T2:</span>
+              <span class="label">Target 2:</span>
               <span class="value">${{ trade.target2?.toFixed(2) || "-" }}</span>
             </div>
           </div>
@@ -134,6 +139,10 @@
                   {{ currentPnL(trade) > 0 ? "+" : "" }}${{
                     currentPnL(trade).toFixed(2)
                   }}
+                  <small v-if="currentPnLPercent(trade) !== null">
+                    ({{ currentPnLPercent(trade) > 0 ? "+" : ""
+                    }}{{ currentPnLPercent(trade).toFixed(1) }}%)
+                  </small>
                 </template>
               </span>
             </div>
@@ -206,14 +215,124 @@
       <div class="modal-content" @click.stop>
         <h3>Edit Trade - {{ editingTrade.ticker }}</h3>
         <form @submit.prevent="saveTradeEdit">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Ticker</label>
+              <input
+                v-model="editingTrade.ticker"
+                type="text"
+                placeholder="Ticker symbol"
+              />
+            </div>
+            <div class="form-group">
+              <label>Strategy</label>
+              <input
+                v-model="editingTrade.strategy"
+                type="text"
+                placeholder="Strategy name"
+              />
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Entry Date</label>
+              <input v-model="editingTrade.entry_time" type="datetime-local" />
+            </div>
+            <div class="form-group">
+              <label>Exit Date</label>
+              <input v-model="editingTrade.exit_time" type="datetime-local" />
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Entry Price</label>
+              <input
+                v-model.number="editingTrade.entryPrice"
+                type="number"
+                step="0.01"
+                min="0.01"
+                placeholder="Entry price"
+              />
+            </div>
+            <div class="form-group">
+              <label>Stop Price</label>
+              <input
+                v-model.number="editingTrade.stopLoss"
+                type="number"
+                step="0.01"
+                min="0.01"
+                placeholder="Stop loss"
+              />
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Target 1</label>
+              <input
+                v-model.number="editingTrade.target1"
+                type="number"
+                step="0.01"
+                min="0.01"
+                placeholder="Target 1"
+              />
+            </div>
+            <div class="form-group">
+              <label>Target 2</label>
+              <input
+                v-model.number="editingTrade.target2"
+                type="number"
+                step="0.01"
+                min="0.01"
+                placeholder="Target 2"
+              />
+            </div>
+          </div>
+
           <div class="form-group">
-            <label>Current Price</label>
+            <label>Exit Price</label>
             <input
-              v-model.number="editingTrade.currentPrice"
+              v-model.number="editingTrade.exit_price"
               type="number"
               step="0.01"
               min="0.01"
-              placeholder="Enter current price"
+              placeholder="Exit price"
+            />
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Shares</label>
+              <input
+                v-model.number="editingTrade.shares"
+                type="number"
+                step="1"
+                min="1"
+                placeholder="Number of shares"
+              />
+            </div>
+            <div class="form-group">
+              <label>Position Size ($)</label>
+              <input
+                v-model.number="editingTrade.position_size"
+                type="number"
+                step="0.01"
+                min="0.01"
+                placeholder="Position size"
+              />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Total Risk ($R)</label>
+            <input
+              v-model.number="editingTrade.riskAmount"
+              type="number"
+              step="0.01"
+              min="0.01"
+              placeholder="Total risk amount"
             />
           </div>
 
@@ -265,14 +384,24 @@ const currentPnL = computed(() => (trade) => {
   if (!trade?.current_price) return 0;
   const priceDiff =
     trade.type === "long"
-      ? trade.entryPrice - trade.current_price
-      : trade.current_price - trade.entryPrice;
+      ? trade.current_price - trade.entryPrice
+      : trade.entryPrice - trade.current_price;
   return priceDiff * trade.shares;
 });
+
+const currentPnLPercent = computed(() => (trade) => {
+  if (!trade?.current_price || !trade?.entryPrice || !trade?.shares)
+    return null;
+  const positionSize = trade.entryPrice * trade.shares;
+  if (positionSize === 0) return null;
+  return (currentPnL.value(trade) / positionSize) * 100;
+});
+
 const currentRMultiple = computed(() => (trade) => {
   if (!trade?.riskAmount || trade.riskAmount === 0) return 0;
   return currentPnL.value(trade) / trade.riskAmount;
 });
+
 const riskAmountR = computed(() => (trade) => {
   if (!trade.riskAmount || props.defaultRSize <= 0) return 0;
   return trade.riskAmount / props.defaultRSize;
@@ -303,9 +432,40 @@ const closeEditModal = () => {
   editingTrade.value = null;
 };
 
-const saveTradeEdit = () => {
-  emit("trade-updated", editingTrade.value);
-  closeEditModal();
+const saveTradeEdit = async () => {
+  try {
+    const updateData = {
+      symbol: editingTrade.value.ticker,
+      strategy: editingTrade.value.strategy,
+      entry_price: editingTrade.value.entryPrice,
+      stop_loss: editingTrade.value.stopLoss,
+      take_profit: editingTrade.value.target1,
+      exit_price: editingTrade.value.exit_price,
+      quantity: editingTrade.value.shares,
+      position_size: editingTrade.value.position_size,
+      risk_amount: editingTrade.value.riskAmount,
+      notes: editingTrade.value.notes,
+      entry_time: editingTrade.value.entry_time,
+      exit_time: editingTrade.value.exit_time,
+    };
+
+    await apiService.updateTrade(editingTrade.value.id, updateData);
+    emit("trade-updated", editingTrade.value);
+    closeEditModal();
+  } catch (error) {
+    console.error("Error updating trade:", error);
+    alert(`Error updating trade: ${error.message}`);
+  }
+};
+
+const formatDate = (dateString) => {
+  if (!dateString) return "N/A";
+  const date = new Date(dateString);
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 };
 
 const closeTrade = async (trade) => {
@@ -669,7 +829,17 @@ const closeTrade = async (trade) => {
   background: #229954;
 }
 
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 15px;
+  margin-bottom: 15px;
+}
+
 @media (max-width: 768px) {
+  .form-row {
+    grid-template-columns: 1fr;
+  }
   .detail-row {
     grid-template-columns: 1fr;
     gap: 10px;

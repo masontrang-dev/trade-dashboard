@@ -27,6 +27,39 @@ db.serialize(() => {
     )
   `);
 
+  db.run(
+    `
+    ALTER TABLE risk_management_settings ADD COLUMN state_tax_rate REAL DEFAULT 0.0;
+  `,
+    (err) => {
+      if (err && !err.message.includes("duplicate column")) {
+        console.error("Error adding state_tax_rate column:", err.message);
+      }
+    }
+  );
+
+  db.run(
+    `
+    ALTER TABLE risk_management_settings ADD COLUMN federal_tax_rate REAL DEFAULT 0.0;
+  `,
+    (err) => {
+      if (err && !err.message.includes("duplicate column")) {
+        console.error("Error adding federal_tax_rate column:", err.message);
+      }
+    }
+  );
+
+  db.run(
+    `
+    ALTER TABLE risk_management_settings ADD COLUMN margin_interest_rate REAL DEFAULT 0.0;
+  `,
+    (err) => {
+      if (err && !err.message.includes("duplicate column")) {
+        console.error("Error adding margin_interest_rate column:", err.message);
+      }
+    }
+  );
+
   db.run(`
     CREATE TABLE IF NOT EXISTS trades (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -48,6 +81,94 @@ db.serialize(() => {
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  db.run(
+    `
+    ALTER TABLE trades ADD COLUMN strategy TEXT;
+  `,
+    (err) => {
+      if (err && !err.message.includes("duplicate column")) {
+        console.error("Error adding strategy column:", err.message);
+      }
+    }
+  );
+
+  db.run(
+    `
+    ALTER TABLE trades ADD COLUMN position_size REAL;
+  `,
+    (err) => {
+      if (err && !err.message.includes("duplicate column")) {
+        console.error("Error adding position_size column:", err.message);
+      }
+    }
+  );
+
+  db.run(
+    `
+    ALTER TABLE trades ADD COLUMN target_price REAL;
+  `,
+    (err) => {
+      if (err && !err.message.includes("duplicate column")) {
+        console.error("Error adding target_price column:", err.message);
+      }
+    }
+  );
+
+  db.run(
+    `
+    ALTER TABLE trades ADD COLUMN tax_amount REAL;
+  `,
+    (err) => {
+      if (err && !err.message.includes("duplicate column")) {
+        console.error("Error adding tax_amount column:", err.message);
+      }
+    }
+  );
+
+  db.run(
+    `
+    ALTER TABLE trades ADD COLUMN margin_interest REAL;
+  `,
+    (err) => {
+      if (err && !err.message.includes("duplicate column")) {
+        console.error("Error adding margin_interest column:", err.message);
+      }
+    }
+  );
+
+  db.run(
+    `
+    ALTER TABLE trades ADD COLUMN state_tax_rate REAL;
+  `,
+    (err) => {
+      if (err && !err.message.includes("duplicate column")) {
+        console.error("Error adding state_tax_rate column:", err.message);
+      }
+    }
+  );
+
+  db.run(
+    `
+    ALTER TABLE trades ADD COLUMN federal_tax_rate REAL;
+  `,
+    (err) => {
+      if (err && !err.message.includes("duplicate column")) {
+        console.error("Error adding federal_tax_rate column:", err.message);
+      }
+    }
+  );
+
+  db.run(
+    `
+    ALTER TABLE trades ADD COLUMN margin_interest_rate REAL;
+  `,
+    (err) => {
+      if (err && !err.message.includes("duplicate column")) {
+        console.error("Error adding margin_interest_rate column:", err.message);
+      }
+    }
+  );
 
   db.run(`
     INSERT OR IGNORE INTO risk_management_settings (

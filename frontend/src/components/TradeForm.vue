@@ -17,16 +17,27 @@
         </div>
       </div>
 
-      <div class="form-group">
-        <label for="ticker">Ticker Symbol</label>
-        <input
-          id="ticker"
-          v-model="trade.ticker"
-          type="text"
-          placeholder="AAPL"
-          required
-          @input="trade.ticker = trade.ticker.toUpperCase()"
-        />
+      <div class="form-row">
+        <div class="form-group">
+          <label for="ticker">Ticker Symbol</label>
+          <input
+            id="ticker"
+            v-model="trade.ticker"
+            type="text"
+            placeholder="AAPL"
+            required
+            @input="trade.ticker = trade.ticker.toUpperCase()"
+          />
+        </div>
+        <div class="form-group">
+          <label for="strategy">Strategy</label>
+          <input
+            id="strategy"
+            v-model="trade.strategy"
+            type="text"
+            placeholder="Breakout, Pullback, etc."
+          />
+        </div>
       </div>
 
       <div class="form-row">
@@ -117,22 +128,6 @@
         <small>Optional custom target level</small>
       </div>
 
-      <div class="form-row">
-        <div class="form-group">
-          <label for="taxRate">Tax Rate (%)</label>
-          <input
-            id="taxRate"
-            v-model.number="trade.taxRate"
-            type="number"
-            step="0.1"
-            min="0"
-            max="100"
-            placeholder="25"
-          />
-          <small>Estimated tax rate for post-tax calculations</small>
-        </div>
-      </div>
-
       <div class="form-group">
         <label for="tradeType">Trade Type</label>
         <select id="tradeType" v-model="trade.type" required>
@@ -149,6 +144,54 @@
           rows="3"
           placeholder="Trade setup reasoning..."
         ></textarea>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="stateTaxRate">State Tax Rate (%)</label>
+          <input
+            id="stateTaxRate"
+            v-model.number="trade.stateTaxRate"
+            type="number"
+            step="0.1"
+            min="0"
+            max="100"
+            placeholder="0"
+            disabled
+            readonly
+          />
+          <small>From risk settings (edit in Risk Management Settings)</small>
+        </div>
+        <div class="form-group">
+          <label for="federalTaxRate">Federal Tax Rate (%)</label>
+          <input
+            id="federalTaxRate"
+            v-model.number="trade.federalTaxRate"
+            type="number"
+            step="0.1"
+            min="0"
+            max="100"
+            placeholder="0"
+            disabled
+            readonly
+          />
+          <small>From risk settings (edit in Risk Management Settings)</small>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="marginInterestRate">Margin Interest Rate (% APR)</label>
+        <input
+          id="marginInterestRate"
+          v-model.number="trade.marginInterestRate"
+          type="number"
+          step="0.01"
+          min="0"
+          max="100"
+          placeholder="0"
+          disabled
+          readonly
+        />
+        <small>From risk settings (edit in Risk Management Settings)</small>
       </div>
 
       <div class="trade-summary" v-if="trade.entryPrice && trade.stopLoss">
@@ -211,10 +254,23 @@ const props = defineProps({
     type: Number,
     default: 2500,
   },
+  stateTaxRate: {
+    type: Number,
+    default: 0,
+  },
+  federalTaxRate: {
+    type: Number,
+    default: 0,
+  },
+  marginInterestRate: {
+    type: Number,
+    default: 0,
+  },
 });
 
 const trade = ref({
   ticker: "",
+  strategy: "",
   shares: 0,
   entryPrice: "",
   stopLoss: "",
@@ -223,7 +279,9 @@ const trade = ref({
   target3: "",
   type: "long",
   notes: "",
-  taxRate: 25,
+  stateTaxRate: props.stateTaxRate,
+  federalTaxRate: props.federalTaxRate,
+  marginInterestRate: props.marginInterestRate,
   rSize: props.defaultRSize,
 });
 
@@ -304,12 +362,13 @@ const postTaxGain2R = computed(() => {
     calculatedTarget2.value - trade.value.entryPrice
   );
   const totalProfit = profitPerShare * calculatedShares.value;
-  const taxRate = (trade.value.taxRate || 25) / 100;
-  const afterTax = totalProfit * (1 - taxRate);
+  const combinedTaxRate =
+    ((trade.value.stateTaxRate || 0) + (trade.value.federalTaxRate || 0)) / 100;
+  const afterTax = totalProfit * (1 - combinedTaxRate);
 
   return {
     preTax: totalProfit,
-    tax: totalProfit * taxRate,
+    tax: totalProfit * combinedTaxRate,
     afterTax: afterTax,
     afterTaxR: afterTax / (trade.value.rSize || props.defaultRSize),
   };
@@ -357,6 +416,28 @@ watch(
   }
 );
 
+// Watch for changes in tax and margin rates from props
+watch(
+  () => props.stateTaxRate,
+  (newVal) => {
+    trade.value.stateTaxRate = newVal;
+  }
+);
+
+watch(
+  () => props.federalTaxRate,
+  (newVal) => {
+    trade.value.federalTaxRate = newVal;
+  }
+);
+
+watch(
+  () => props.marginInterestRate,
+  (newVal) => {
+    trade.value.marginInterestRate = newVal;
+  }
+);
+
 const validateTrade = () => {
   if (trade.value.type === "long") {
     if (trade.value.stopLoss >= trade.value.entryPrice) {
@@ -397,6 +478,7 @@ const submitTrade = () => {
   // Reset form
   trade.value = {
     ticker: "",
+    strategy: "",
     shares: 0,
     entryPrice: "",
     stopLoss: "",
@@ -405,7 +487,10 @@ const submitTrade = () => {
     target3: "",
     type: "long",
     notes: "",
-    taxRate: 25,
+    stateTaxRate: props.stateTaxRate,
+    federalTaxRate: props.federalTaxRate,
+    marginInterestRate: props.marginInterestRate,
+    rSize: props.defaultRSize,
   };
 };
 </script>
