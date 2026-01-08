@@ -282,6 +282,7 @@ const loadClosedTrades = async () => {
       taxAmount: trade.tax_amount,
       marginInterest: trade.margin_interest,
       positionSize: trade.position_size || trade.entry_price * trade.quantity,
+      tradingMode: trade.trading_mode,
     }));
     console.log("Loaded closed trades:", tradeHistory.value);
   } catch (error) {
@@ -351,6 +352,7 @@ const loadActiveTrades = async () => {
             : trade.entry_price || 0,
         pnl: pnl,
         pnl_percent: pnlPercent,
+        tradingMode: trade.trading_mode,
       };
     });
 
@@ -447,10 +449,45 @@ onMounted(async () => {
 });
 
 const dailyRiskUsed = computed(() => {
+  if (tradingMode.value !== "DAY") {
+    return 0; // SWING mode doesn't use daily risk tracking
+  }
+
   const today = new Date().toDateString();
-  return tradeHistory.value
-    .filter((trade) => new Date(trade.date).toDateString() === today)
-    .reduce((total, trade) => total + (trade.realizedLoss || 0), 0);
+
+  // Calculate realized losses from DAY trades closed today
+  const realizedDayLosses = tradeHistory.value
+    .filter((trade) => {
+      if (!trade.closeDate) return false;
+      // Include trades with null/undefined trading_mode (legacy trades)
+      const tradeMode = trade.tradingMode || tradingMode.value;
+      if (tradeMode !== "DAY") return false;
+      return new Date(trade.closeDate).toDateString() === today;
+    })
+    .reduce((total, trade) => {
+      // Only count losses, not profits
+      const loss = trade.profitLoss < 0 ? Math.abs(trade.profitLoss) : 0;
+      return total + loss;
+    }, 0);
+
+  // Calculate current open risk from DAY trades
+  const openDayRisk = activeTrades.value
+    .filter((trade) => {
+      // Include trades with null/undefined trading_mode (legacy trades)
+      const tradeMode = trade.tradingMode || tradingMode.value;
+      return tradeMode === "DAY";
+    })
+    .reduce((total, trade) => {
+      // Calculate remaining downside to stop
+      const currentPrice = trade.current_price || trade.entryPrice;
+      const remainingRisk =
+        Math.abs(currentPrice - trade.stopLoss) * trade.shares;
+      // Risk can only decrease (when stop is moved), never increase from favorable price movement
+      const originalRisk = trade.riskAmount || remainingRisk;
+      return total + Math.min(originalRisk, remainingRisk);
+    }, 0);
+
+  return realizedDayLosses + openDayRisk;
 });
 
 const dailyRiskUsedR = computed(() => {
@@ -470,10 +507,32 @@ const maxOpenRiskR = computed(() => {
 });
 
 const totalOpenRisk = computed(() => {
-  return activeTrades.value.reduce(
-    (total, trade) => total + trade.riskAmount,
-    0
-  );
+  if (tradingMode.value === "DAY") {
+    // For DAY mode: only count remaining downside to stop for DAY trades
+    return activeTrades.value
+      .filter((trade) => {
+        // Include trades with null/undefined trading_mode (legacy trades)
+        const tradeMode = trade.tradingMode || tradingMode.value;
+        return tradeMode === "DAY";
+      })
+      .reduce((total, trade) => {
+        const currentPrice = trade.current_price || trade.entryPrice;
+        const remainingRisk =
+          Math.abs(currentPrice - trade.stopLoss) * trade.shares;
+        // Risk can only decrease (when stop is moved), never increase from favorable price movement
+        const originalRisk = trade.riskAmount || remainingRisk;
+        return total + Math.min(originalRisk, remainingRisk);
+      }, 0);
+  } else {
+    // For SWING mode: count all open SWING trade risk
+    return activeTrades.value
+      .filter((trade) => {
+        // Include trades with null/undefined trading_mode (legacy trades)
+        const tradeMode = trade.tradingMode || tradingMode.value;
+        return tradeMode === "SWING";
+      })
+      .reduce((total, trade) => total + trade.riskAmount, 0);
+  }
 });
 
 const dailyRiskPercentage = computed(() => {
@@ -521,6 +580,7 @@ const handleTradeAdded = async (trade) => {
       state_tax_rate: trade.stateTaxRate || 0,
       federal_tax_rate: trade.federalTaxRate || 0,
       margin_interest_rate: trade.marginInterestRate || 0,
+      trading_mode: tradingMode.value,
     };
 
     // Make the API call

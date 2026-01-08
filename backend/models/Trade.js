@@ -46,6 +46,7 @@ class Trade {
         notes,
         risk_amount,
         r_size,
+        trading_mode,
       } = tradeData;
 
       // Round risk_amount to 2 decimal places to avoid floating-point precision issues
@@ -56,8 +57,8 @@ class Trade {
       const sql = `
         INSERT INTO trades (
           symbol, type, quantity, entry_price, stop_loss, 
-          take_profit, notes, risk_amount, r_size, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN')
+          take_profit, notes, risk_amount, r_size, trading_mode, status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN')
       `;
 
       db.run(
@@ -72,6 +73,7 @@ class Trade {
           notes || null,
           roundedRiskAmount,
           r_size || null,
+          trading_mode || null,
         ],
         function (err) {
           if (err) {

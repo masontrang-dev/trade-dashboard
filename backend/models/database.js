@@ -214,6 +214,17 @@ db.serialize(() => {
     }
   );
 
+  db.run(
+    `
+    ALTER TABLE trades ADD COLUMN trading_mode TEXT CHECK(trading_mode IN ('DAY', 'SWING'));
+  `,
+    (err) => {
+      if (err && !err.message.includes("duplicate column")) {
+        console.error("Error adding trading_mode column:", err.message);
+      }
+    }
+  );
+
   db.run(`
     INSERT OR IGNORE INTO risk_management_settings (
       max_position_size, max_daily_loss, max_risk_per_trade, 
