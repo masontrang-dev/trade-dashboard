@@ -427,6 +427,8 @@ const handleTradeAdded = async (trade) => {
     };
 
     await tradesStore.addTrade(tradeData);
+    // Fetch updated trades to get backend-calculated fields (currentPrice, P&L, etc.)
+    await tradesStore.fetchOpenTrades();
     uiStore.showSuccessToast("Trade added successfully");
   } catch (error) {
     console.error("Error saving trade:", error);
