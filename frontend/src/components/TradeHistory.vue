@@ -36,7 +36,7 @@
     </div>
     <div class="header-row">
       <h2>Trade History</h2>
-      <div class="header-actions" v-if="history.length > 0">
+      <div class="header-actions" v-if="tradesStore.closedTrades.length > 0">
         <button v-if="!editMode" @click="enterEditMode" class="edit-mode-btn">
           Edit
         </button>
@@ -58,7 +58,7 @@
       </div>
     </div>
 
-    <div v-if="history.length === 0" class="no-history">
+    <div v-if="tradesStore.closedTrades.length === 0" class="no-history">
       <p>No completed trades yet. Your trading history will appear here.</p>
     </div>
 
@@ -84,7 +84,7 @@
             class="stat-value"
             :class="{ positive: totalPnL > 0, negative: totalPnL < 0 }"
           >
-            <template v-if="showRValues">
+            <template v-if="uiStore.showRInDollars">
               {{ totalPnLR > 0 ? "+" : "" }}{{ totalPnLR.toFixed(2) }}R
               <small
                 >({{ totalPnL > 0 ? "+" : "" }}${{
@@ -375,6 +375,9 @@
 import { ref, computed, watch } from "vue";
 import Toast from "./Toast.vue";
 import api from "../services/api";
+import { useTradesStore } from "../stores/trades";
+import { useUIStore } from "../stores/ui";
+import { useSettingsStore } from "../stores/settings";
 import {
   calculateProfitLoss,
   calculateTaxAmount,
@@ -382,20 +385,9 @@ import {
   calculateDaysHeld,
 } from "../../../shared/tradeCalculations";
 
-const props = defineProps({
-  history: {
-    type: Array,
-    default: () => [],
-  },
-  showRValues: {
-    type: Boolean,
-    default: false,
-  },
-  defaultRSize: {
-    type: Number,
-    default: 100,
-  },
-});
+const tradesStore = useTradesStore();
+const uiStore = useUIStore();
+const settingsStore = useSettingsStore();
 
 const filterPeriod = ref("all");
 const filterType = ref("all");
@@ -420,10 +412,10 @@ const showToast = (message, type = "success") => {
 };
 
 // Statistics
-const totalTrades = computed(() => props.history.length);
+const totalTrades = computed(() => tradesStore.closedTrades.length);
 
 const winningTrades = computed(() =>
-  props.history.filter((trade) => trade.profitLoss > 0)
+  tradesStore.closedTrades.filter((trade) => trade.profitLoss > 0)
 );
 
 const winRate = computed(() => {
@@ -432,16 +424,16 @@ const winRate = computed(() => {
 });
 
 const totalPnL = computed(() =>
-  props.history.reduce((total, trade) => total + trade.profitLoss, 0)
+  tradesStore.closedTrades.reduce((total, trade) => total + trade.profitLoss, 0)
 );
 
 const totalPnLR = computed(() => {
-  return totalPnL.value / props.defaultRSize;
+  return totalPnL.value / settingsStore.riskSettings.defaultRSize;
 });
 
 const avgRMultiple = computed(() => {
   if (totalTrades.value === 0) return 0;
-  const totalR = props.history.reduce((total, trade) => {
+  const totalR = tradesStore.closedTrades.reduce((total, trade) => {
     const rMultiple =
       trade.riskAmount > 0 ? trade.profitLoss / trade.riskAmount : 0;
     return total + rMultiple;
@@ -453,7 +445,7 @@ const avgRMultiple = computed(() => {
 const monthlyData = computed(() => {
   const monthlyMap = new Map();
 
-  props.history.forEach((trade) => {
+  tradesStore.closedTrades.forEach((trade) => {
     const date = new Date(trade.closeDate);
     const monthKey = `${date.getFullYear()}-${String(
       date.getMonth() + 1
@@ -480,7 +472,7 @@ const maxMonthlyPnL = computed(() => {
 
 // Filter functions
 const filterTrades = () => {
-  let filtered = [...props.history];
+  let filtered = [...tradesStore.closedTrades];
 
   // Filter by period
   const now = new Date();
@@ -651,7 +643,7 @@ const saveAllChanges = async () => {
   try {
     const updates = Object.keys(editedTrades.value).map(async (tradeId) => {
       const edited = editedTrades.value[tradeId];
-      const originalTrade = props.history.find(
+      const originalTrade = tradesStore.closedTrades.find(
         (t) => t.id === parseInt(tradeId)
       );
 
@@ -721,7 +713,7 @@ filterTrades();
 
 // Watch for history changes
 watch(
-  () => props.history,
+  () => tradesStore.closedTrades,
   () => {
     filterTrades();
   },

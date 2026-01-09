@@ -11,24 +11,25 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from "vue";
+import { computed } from "vue";
+import { useUIStore } from "../stores/ui";
 
 const emit = defineEmits(["toggle-changed"]);
 
-const showRValues = ref(false);
+const uiStore = useUIStore();
+
+const showRValues = computed({
+  get: () => uiStore.showRInDollars,
+  set: (value) => {
+    uiStore.toggleRDisplay();
+    emit("toggle-changed", value);
+  },
+});
 
 const handleToggle = () => {
-  localStorage.setItem("showRValues", showRValues.value.toString());
-  emit("toggle-changed", showRValues.value);
+  uiStore.toggleRDisplay();
+  emit("toggle-changed", uiStore.showRInDollars);
 };
-
-onMounted(() => {
-  const saved = localStorage.getItem("showRValues");
-  if (saved) {
-    showRValues.value = saved === "true";
-    emit("toggle-changed", showRValues.value);
-  }
-});
 </script>
 
 <style scoped>

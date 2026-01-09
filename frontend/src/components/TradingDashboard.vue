@@ -248,7 +248,9 @@ import TradeForm from "./TradeForm.vue";
 import ActiveTrades from "./ActiveTrades.vue";
 import TradeHistory from "./TradeHistory.vue";
 import SettingsModal from "./SettingsModal.vue";
-import api from "../services/api";
+import { useTradesStore } from "../stores/trades";
+import { useSettingsStore } from "../stores/settings";
+import { useUIStore } from "../stores/ui";
 import {
   calculateRiskPerShare,
   calculateTotalRisk,
@@ -256,209 +258,81 @@ import {
   calculateRMultiple,
 } from "../../../shared/tradeCalculations";
 
-const maxDailyLoss = ref(500);
-const maxOpenRisk = ref(2000);
-const activeTrades = ref([]);
-const tradeHistory = ref([]);
-const tradingMode = ref("SWING");
-const devMode = ref(false);
+// Initialize stores
+const tradesStore = useTradesStore();
+const settingsStore = useSettingsStore();
+const uiStore = useUIStore();
+
 const isSettingsOpen = ref(false);
-const maxOpenPositions = ref(5);
-const enableAlerts = ref(true);
 
-// Load closed trades from API
-const loadClosedTrades = async () => {
-  try {
-    const closedTrades = await api.getClosedTrades();
-    tradeHistory.value = closedTrades.map((trade) => ({
-      ...trade,
-      ticker: trade.symbol,
-      type: trade.type.toLowerCase(),
-      quantity: trade.quantity,
-      entryDate: trade.entryTime,
-      closeDate: trade.exitTime,
-    }));
-    console.log("Loaded closed trades:", tradeHistory.value);
-  } catch (error) {
-    console.error("Error loading closed trades:", error);
-  }
-};
-const showRValues = ref(false);
-const defaultRSize = ref(2500);
+// Computed refs from stores
+const activeTrades = computed(() => tradesStore.openTrades);
+const tradeHistory = computed(() => tradesStore.closedTrades);
+const tradingMode = computed(() => settingsStore.tradingMode);
+const devMode = computed(() => settingsStore.devMode);
+const showRValues = computed(() => uiStore.showRInDollars);
+const defaultRSize = computed(() => settingsStore.riskSettings.defaultRSize);
+const maxDailyLoss = computed(() => settingsStore.riskSettings.maxDailyLoss);
+const maxOpenRisk = computed(() => settingsStore.riskSettings.maxOpenRisk);
+const maxOpenPositions = computed(
+  () => settingsStore.riskSettings.maxOpenPositions
+);
+const enableAlerts = computed(() => settingsStore.riskSettings.enableAlerts);
+const stateTaxRate = computed(() => settingsStore.riskSettings.stateTaxRate);
+const federalTaxRate = computed(
+  () => settingsStore.riskSettings.federalTaxRate
+);
+const marginInterestRate = computed(
+  () => settingsStore.riskSettings.marginInterestRate
+);
 
-// Load active trades from API
+// Load data functions using stores
 const loadActiveTrades = async () => {
-  try {
-    console.log("Fetching active trades from API...");
-    const trades = await api.getOpenTrades();
-    console.log("Received trades from API:", trades);
-
-    if (!Array.isArray(trades)) {
-      console.error("Invalid trades data received:", trades);
-      throw new Error("Invalid trades data received from server");
-    }
-
-    activeTrades.value = trades.map((trade) => {
-      // Log each trade being processed
-      console.log("Processing trade:", {
-        id: trade.id,
-        symbol: trade.symbol,
-        hasPrice: trade.currentPrice !== undefined,
-      });
-
-      // Calculate risk amount if not provided
-      const riskPerShare = calculateRiskPerShare(
-        trade.entryPrice,
-        trade.stopLoss
-      );
-      const riskAmount =
-        trade.riskAmount || calculateTotalRisk(riskPerShare, trade.quantity);
-
-      return {
-        ...trade,
-        ticker: trade.symbol,
-        quantity: trade.quantity || 0,
-        target1: trade.targetPrice1,
-        target2: trade.targetPrice2,
-        riskAmount: riskAmount,
-        rSize: trade.rSize || defaultRSize.value,
-        entryTime: trade.entryTime || new Date().toISOString(),
-        exitTime: trade.exitTime,
-        currentPrice:
-          trade.currentPrice !== undefined && trade.currentPrice !== null
-            ? trade.currentPrice
-            : trade.entryPrice || 0,
-        // P&L will be calculated on-demand in ActiveTrades component from currentPrice
-      };
-    });
-
-    console.log(
-      `Successfully processed ${activeTrades.value.length} trades in UI`
-    );
-  } catch (error) {
-    console.error("Failed to load active trades:", error);
-    // You might want to show an error message to the user here
-    // errorMessage.value = "Failed to load active trades. Please try again.";
-  }
+  await tradesStore.fetchOpenTrades();
 };
 
-const stateTaxRate = ref(0);
-const federalTaxRate = ref(0);
-const marginInterestRate = ref(0);
+const loadClosedTrades = async () => {
+  await tradesStore.fetchClosedTrades();
+};
 
 const loadRiskSettings = async () => {
-  try {
-    const settings = await api.getRiskSettings();
-    if (settings) {
-      if (settings.maxDailyLoss !== undefined) {
-        maxDailyLoss.value = settings.maxDailyLoss;
-      }
-      if (settings.maxOpenRisk !== undefined) {
-        maxOpenRisk.value = settings.maxOpenRisk;
-      }
-      if (settings.defaultRSize !== undefined) {
-        defaultRSize.value = settings.defaultRSize;
-      }
-      if (settings.maxOpenPositions !== undefined) {
-        maxOpenPositions.value = settings.maxOpenPositions;
-      }
-      if (settings.stateTaxRate !== undefined) {
-        stateTaxRate.value = settings.stateTaxRate;
-      }
-      if (settings.federalTaxRate !== undefined) {
-        federalTaxRate.value = settings.federalTaxRate;
-      }
-      if (settings.marginInterestRate !== undefined) {
-        marginInterestRate.value = settings.marginInterestRate;
-      }
-      if (settings.enableAlerts !== undefined) {
-        enableAlerts.value = settings.enableAlerts;
-      }
-    }
-  } catch (error) {
-    console.error("Failed to load risk settings:", error);
-    // Fallback to localStorage if API fails
-    const saved = localStorage.getItem("riskSettings");
-    if (saved) {
-      const parsedSettings = JSON.parse(saved);
-      if (parsedSettings.maxDailyLoss)
-        maxDailyLoss.value = parsedSettings.maxDailyLoss;
-      if (parsedSettings.maxOpenRisk)
-        maxOpenRisk.value = parsedSettings.maxOpenRisk;
-      if (parsedSettings.defaultRSize)
-        defaultRSize.value = parsedSettings.defaultRSize;
-    }
-  }
-
-  // Load trading mode and dev mode from backend
-  try {
-    const modeSettings = await api.getModeSettings();
-    if (modeSettings) {
-      if (modeSettings.tradingMode) {
-        tradingMode.value = modeSettings.tradingMode;
-        localStorage.setItem("tradingMode", modeSettings.tradingMode);
-      }
-      if (modeSettings.devMode !== undefined) {
-        devMode.value = modeSettings.devMode;
-        localStorage.setItem("devMode", JSON.stringify(modeSettings.devMode));
-      }
-    }
-  } catch (error) {
-    console.error("Failed to load mode settings from backend:", error);
-    // Fallback to localStorage
-    const savedTradingMode = localStorage.getItem("tradingMode");
-    if (savedTradingMode && ["DAY", "SWING"].includes(savedTradingMode)) {
-      tradingMode.value = savedTradingMode;
-    }
-
-    const savedDevMode = localStorage.getItem("devMode");
-    if (savedDevMode) {
-      devMode.value = JSON.parse(savedDevMode);
-    }
-  }
+  await settingsStore.loadSettings();
 };
 
 // Load data when component mounts
 onMounted(async () => {
   await loadRiskSettings();
-  await Promise.all([loadActiveTrades(), loadClosedTrades()]);
+  await tradesStore.fetchAllTrades();
 });
 
 const dailyRiskUsed = computed(() => {
   if (tradingMode.value !== "DAY") {
-    return 0; // SWING mode doesn't use daily risk tracking
+    return 0;
   }
 
   const today = new Date().toDateString();
 
-  // Calculate realized losses from DAY trades closed today
   const realizedDayLosses = tradeHistory.value
     .filter((trade) => {
-      if (!trade.closeDate) return false;
-      // Include trades with null/undefined trading_mode (legacy trades)
+      if (!trade.exitTime) return false;
       const tradeMode = trade.tradingMode || tradingMode.value;
       if (tradeMode !== "DAY") return false;
-      return new Date(trade.closeDate).toDateString() === today;
+      return new Date(trade.exitTime).toDateString() === today;
     })
     .reduce((total, trade) => {
-      // Only count losses, not profits
       const loss = trade.profitLoss < 0 ? Math.abs(trade.profitLoss) : 0;
       return total + loss;
     }, 0);
 
-  // Calculate current open risk from DAY trades
   const openDayRisk = activeTrades.value
     .filter((trade) => {
-      // Include trades with null/undefined trading_mode (legacy trades)
       const tradeMode = trade.tradingMode || tradingMode.value;
       return tradeMode === "DAY";
     })
     .reduce((total, trade) => {
-      // Calculate remaining downside to stop
       const currentPrice = trade.currentPrice || trade.entryPrice;
       const remainingRisk =
         Math.abs(currentPrice - trade.stopLoss) * trade.quantity;
-      // Risk can only decrease (when stop is moved), never increase from favorable price movement
       const originalRisk = trade.riskAmount || remainingRisk;
       return total + Math.min(originalRisk, remainingRisk);
     }, 0);
@@ -484,10 +358,8 @@ const maxOpenRiskR = computed(() => {
 
 const totalOpenRisk = computed(() => {
   if (tradingMode.value === "DAY") {
-    // For DAY mode: only count remaining downside to stop for DAY trades
     return activeTrades.value
       .filter((trade) => {
-        // Include trades with null/undefined trading_mode (legacy trades)
         const tradeMode = trade.tradingMode || tradingMode.value;
         return tradeMode === "DAY";
       })
@@ -495,19 +367,16 @@ const totalOpenRisk = computed(() => {
         const currentPrice = trade.currentPrice || trade.entryPrice;
         const remainingRisk =
           Math.abs(currentPrice - trade.stopLoss) * trade.quantity;
-        // Risk can only decrease (when stop is moved), never increase from favorable price movement
         const originalRisk = trade.riskAmount || remainingRisk;
         return total + Math.min(originalRisk, remainingRisk);
       }, 0);
   } else {
-    // For SWING mode: count all open SWING trade risk
     return activeTrades.value
       .filter((trade) => {
-        // Include trades with null/undefined trading_mode (legacy trades)
         const tradeMode = trade.tradingMode || tradingMode.value;
         return tradeMode === "SWING";
       })
-      .reduce((total, trade) => total + trade.riskAmount, 0);
+      .reduce((total, trade) => total + (trade.riskAmount || 0), 0);
   }
 });
 
@@ -533,12 +402,10 @@ const remainingRiskPercentage = computed(() => {
 
 const handleTradeAdded = async (trade) => {
   try {
-    // Calculate risk amount
     const riskAmount =
       Math.abs(trade.entryPrice - trade.stopLoss) *
       (trade.calculatedShares || trade.shares);
 
-    // Prepare the trade data for the API
     const tradeData = {
       symbol: trade.ticker,
       strategy: trade.strategy || null,
@@ -559,106 +426,46 @@ const handleTradeAdded = async (trade) => {
       tradingMode: tradingMode.value,
     };
 
-    // Make the API call
-    const savedTrade = await api.createTrade(tradeData);
-
-    // Add the saved trade to the local state with proper formatting
-    const newTrade = {
-      id: savedTrade.id,
-      ticker: trade.ticker,
-      type: trade.type.toUpperCase(),
-      quantity: trade.calculatedShares || trade.shares,
-      entryPrice: parseFloat(trade.entryPrice),
-      stopLoss: parseFloat(trade.stopLoss),
-      target1: trade.target1 ? parseFloat(trade.target1) : null,
-      target2: trade.target2 ? parseFloat(trade.target2) : null,
-      notes: trade.notes,
-      riskAmount: riskAmount,
-      rSize: defaultRSize.value,
-      entryTime: new Date().toISOString(),
-      status: "OPEN",
-      currentPrice: savedTrade.currentPrice || parseFloat(trade.entryPrice),
-    };
-
-    // Add to the beginning of the array
-    activeTrades.value = [newTrade, ...activeTrades.value];
+    await tradesStore.addTrade(tradeData);
+    uiStore.showSuccessToast("Trade added successfully");
   } catch (error) {
     console.error("Error saving trade:", error);
-    alert("Failed to save trade. Please try again.");
+    uiStore.showErrorToast("Failed to save trade. Please try again.");
   }
 };
 
 const handleTradeClosed = async () => {
-  // Refresh both active and closed trades
-  await Promise.all([loadActiveTrades(), loadClosedTrades()]);
-
-  // Update risk metrics
-  await loadRiskSettings();
+  await tradesStore.fetchAllTrades();
+  await settingsStore.loadSettings();
 };
 
 const handleTradeUpdated = async (updatedTrade) => {
-  // Refetch all active trades to ensure we have currentPrice and all fields
-  await loadActiveTrades();
+  await tradesStore.fetchOpenTrades();
 };
 
-const handleRiskSettingsUpdated = (settings) => {
-  if (settings.maxDailyLoss !== undefined) {
-    maxDailyLoss.value = settings.maxDailyLoss;
-  }
-  if (settings.maxOpenRisk !== undefined) {
-    maxOpenRisk.value = settings.maxOpenRisk;
-  }
-  if (settings.defaultRSize !== undefined) {
-    defaultRSize.value = settings.defaultRSize;
-  }
-  if (settings.stateTaxRate !== undefined) {
-    stateTaxRate.value = settings.stateTaxRate;
-  }
-  if (settings.federalTaxRate !== undefined) {
-    federalTaxRate.value = settings.federalTaxRate;
-  }
-  if (settings.marginInterestRate !== undefined) {
-    marginInterestRate.value = settings.marginInterestRate;
-  }
-
-  // Update local storage as a fallback
-  const currentSettings = {
-    maxDailyLoss: maxDailyLoss.value,
-    maxOpenRisk: maxOpenRisk.value,
-    defaultRSize: defaultRSize.value,
-  };
-  localStorage.setItem("riskSettings", JSON.stringify(currentSettings));
+const handleRiskSettingsUpdated = async (settings) => {
+  await settingsStore.updateRiskSettings(settings);
 };
 
 const handleTradingModeChange = async (newMode) => {
   try {
-    // Call API to switch mode and re-evaluate trades
-    await api.switchTradingMode(newMode, devMode.value);
-
-    tradingMode.value = newMode;
-    localStorage.setItem("tradingMode", newMode);
-
-    // Reload trades after mode change
-    await Promise.all([loadActiveTrades(), loadClosedTrades()]);
+    await settingsStore.setTradingMode(newMode);
+    await tradesStore.fetchAllTrades();
+    uiStore.showSuccessToast(`Switched to ${newMode} mode`);
   } catch (error) {
     console.error("Error switching trading mode:", error);
-    alert("Failed to switch trading mode. Please try again.");
+    uiStore.showErrorToast("Failed to switch trading mode. Please try again.");
   }
 };
 
 const handleDevModeChange = async (isDevMode) => {
   try {
-    // Call API to switch dev mode
-    await api.switchDevMode(isDevMode);
-
-    devMode.value = isDevMode;
-    localStorage.setItem("devMode", JSON.stringify(isDevMode));
-
-    // Reload trades from the appropriate database
-    await Promise.all([loadActiveTrades(), loadClosedTrades()]);
+    await settingsStore.setDevMode(isDevMode);
+    await tradesStore.fetchAllTrades();
+    uiStore.showSuccessToast(`Dev mode ${isDevMode ? "enabled" : "disabled"}`);
   } catch (error) {
     console.error("Error switching dev mode:", error);
-    alert("Failed to switch dev mode. Please try again.");
+    uiStore.showErrorToast("Failed to switch dev mode. Please try again.");
   }
 };
 
@@ -672,57 +479,12 @@ const closeSettings = () => {
 
 const handleSettingsSave = async (settings) => {
   try {
-    const settingsToSave = {
-      maxDailyLoss: settings.maxDailyLoss,
-      maxOpenRisk: settings.maxOpenRisk,
-      maxOpenPositions: settings.maxOpenPositions,
-      defaultRSize: settings.defaultRSize,
-      enableAlerts: settings.enableAlerts,
-      stateTaxRate: settings.stateTaxRate,
-      federalTaxRate: settings.federalTaxRate,
-      marginInterestRate: settings.marginInterestRate,
-    };
-
-    await api.updateRiskSettings(settingsToSave);
-
-    // Update local state
-    if (settings.maxDailyLoss !== undefined) {
-      maxDailyLoss.value = settings.maxDailyLoss;
-    }
-    if (settings.maxOpenRisk !== undefined) {
-      maxOpenRisk.value = settings.maxOpenRisk;
-    }
-    if (settings.defaultRSize !== undefined) {
-      defaultRSize.value = settings.defaultRSize;
-    }
-    if (settings.maxOpenPositions !== undefined) {
-      maxOpenPositions.value = settings.maxOpenPositions;
-    }
-    if (settings.stateTaxRate !== undefined) {
-      stateTaxRate.value = settings.stateTaxRate;
-    }
-    if (settings.federalTaxRate !== undefined) {
-      federalTaxRate.value = settings.federalTaxRate;
-    }
-    if (settings.marginInterestRate !== undefined) {
-      marginInterestRate.value = settings.marginInterestRate;
-    }
-    if (settings.enableAlerts !== undefined) {
-      enableAlerts.value = settings.enableAlerts;
-    }
-
-    // Update local storage as a fallback
-    const currentSettings = {
-      maxDailyLoss: maxDailyLoss.value,
-      maxOpenRisk: maxOpenRisk.value,
-      defaultRSize: defaultRSize.value,
-    };
-    localStorage.setItem("riskSettings", JSON.stringify(currentSettings));
-
-    console.log("Settings saved successfully");
+    await settingsStore.updateRiskSettings(settings);
+    uiStore.showSuccessToast("Settings saved successfully");
+    closeSettings();
   } catch (error) {
     console.error("Failed to save settings:", error);
-    alert("Failed to save settings. Please try again.");
+    uiStore.showErrorToast("Failed to save settings. Please try again.");
   }
 };
 </script>

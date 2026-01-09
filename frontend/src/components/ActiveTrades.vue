@@ -35,15 +35,15 @@
         </div>
       </div>
     </div>
-    <h2>Active Trades ({{ trades.length }})</h2>
+    <h2>Active Trades ({{ tradesStore.openTrades.length }})</h2>
 
-    <div v-if="trades.length === 0" class="no-trades">
+    <div v-if="tradesStore.openTrades.length === 0" class="no-trades">
       <p>No active trades. Add your first trade to get started!</p>
     </div>
 
     <div v-else class="trades-list">
       <div
-        v-for="trade in trades"
+        v-for="trade in tradesStore.openTrades"
         :key="trade.id"
         class="trade-card"
         :class="{
@@ -203,7 +203,7 @@
                 <div class="detail-item">
                   <span class="label">Risk:</span>
                   <span v-if="editingTradeId !== trade.id" class="value">
-                    <template v-if="showRValues">
+                    <template v-if="uiStore.showRInDollars">
                       {{
                         (trade.riskAmount ? riskAmountR(trade) : 0).toFixed(2)
                       }}R
@@ -322,7 +322,7 @@
                   loss: currentPnL(trade) < 0,
                 }"
               >
-                <template v-if="showRValues">
+                <template v-if="uiStore.showRInDollars">
                   {{ currentRMultiple(trade) > 0 ? "+" : ""
                   }}{{ currentRMultiple(trade).toFixed(2) }}R
                   <small
@@ -342,7 +342,7 @@
                 </template>
               </span>
             </div>
-            <div class="r-multiple" v-if="!showRValues">
+            <div class="r-multiple">
               <span class="label">R Multiple:</span>
               <span
                 class="r-value"
@@ -489,6 +489,9 @@
 import { ref, computed, watch } from "vue";
 import apiService from "../services/api";
 import Toast from "./Toast.vue";
+import { useTradesStore } from "../stores/trades";
+import { useUIStore } from "../stores/ui";
+import { useSettingsStore } from "../stores/settings";
 import {
   calculateProfitLoss,
   calculateProfitLossPercent,
@@ -496,20 +499,9 @@ import {
   dollarsToR,
 } from "../../../shared/tradeCalculations";
 
-const props = defineProps({
-  trades: {
-    type: Array,
-    default: () => [],
-  },
-  showRValues: {
-    type: Boolean,
-    default: false,
-  },
-  defaultRSize: {
-    type: Number,
-    default: 100,
-  },
-});
+const tradesStore = useTradesStore();
+const uiStore = useUIStore();
+const settingsStore = useSettingsStore();
 
 const emit = defineEmits(["trade-closed", "trade-updated"]);
 
@@ -564,7 +556,7 @@ const currentRMultiple = computed(() => (trade) => {
 });
 
 const riskAmountR = computed(() => (trade) => {
-  return dollarsToR(trade.riskAmount, props.defaultRSize);
+  return dollarsToR(trade.riskAmount, settingsStore.riskSettings.defaultRSize);
 });
 
 const progressToTarget = computed(() => (trade, target) => {

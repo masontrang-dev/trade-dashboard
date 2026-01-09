@@ -122,4 +122,5 @@ backend/database/*.db
 backend/database/*.db-journal
 backend/database/migrations
 
+
 /documentation

@@ -293,6 +293,9 @@
 
 <script setup>
 import { ref, computed, watch } from "vue";
+import { useSettingsStore } from "../stores/settings";
+import { useUIStore } from "../stores/ui";
+import { useTradesStore } from "../stores/trades";
 import {
   calculateRiskPerShare,
   calculatePositionSize,
@@ -306,6 +309,10 @@ import {
 } from "../../../shared/tradeCalculations";
 
 const emit = defineEmits(["trade-added"]);
+
+const settingsStore = useSettingsStore();
+const uiStore = useUIStore();
+const tradesStore = useTradesStore();
 
 const strategyDropdownOpen = ref(false);
 
@@ -337,41 +344,6 @@ const vClickOutside = {
   },
 };
 
-const props = defineProps({
-  showRValues: {
-    type: Boolean,
-    default: false,
-  },
-  defaultRSize: {
-    type: Number,
-    default: 2500,
-  },
-  stateTaxRate: {
-    type: Number,
-    default: 0,
-  },
-  federalTaxRate: {
-    type: Number,
-    default: 0,
-  },
-  marginInterestRate: {
-    type: Number,
-    default: 0,
-  },
-  tradingMode: {
-    type: String,
-    default: "SWING",
-  },
-  maxDailyLoss: {
-    type: Number,
-    default: 500,
-  },
-  dailyRiskUsed: {
-    type: Number,
-    default: 0,
-  },
-});
-
 const trade = ref({
   ticker: "",
   strategy: null,
@@ -383,14 +355,14 @@ const trade = ref({
   target3: "",
   type: "long",
   notes: "",
-  stateTaxRate: props.stateTaxRate,
-  federalTaxRate: props.federalTaxRate,
-  marginInterestRate: props.marginInterestRate,
-  rSize: props.defaultRSize,
+  stateTaxRate: settingsStore.riskSettings.stateTaxRate,
+  federalTaxRate: settingsStore.riskSettings.federalTaxRate,
+  marginInterestRate: settingsStore.riskSettings.marginInterestRate,
+  rSize: settingsStore.riskSettings.defaultRSize,
 });
 
 const strategyOptions = computed(() => {
-  if (props.tradingMode === "DAY") {
+  if (settingsStore.tradingMode === "DAY") {
     return [
       "Breakout",
       "Pullback",
@@ -421,7 +393,7 @@ const strategyOptions = computed(() => {
 });
 
 const rValueDollars = computed(() => {
-  return trade.value.rSize || props.defaultRSize; // Use trade's rSize with fallback to default
+  return trade.value.rSize || settingsStore.riskSettings.defaultRSize;
 });
 
 const riskPerShare = computed(() => {
@@ -429,7 +401,7 @@ const riskPerShare = computed(() => {
 });
 
 const calculatedShares = computed(() => {
-  const rDollars = trade.value.rSize || props.defaultRSize;
+  const rDollars = trade.value.rSize || settingsStore.riskSettings.defaultRSize;
   return calculatePositionSize(rDollars, riskPerShare.value);
 });
 
@@ -437,7 +409,7 @@ const sharesCalculationInfo = computed(() => {
   if (riskPerShare.value === 0) {
     return "";
   }
-  const rDollars = trade.value.rSize || props.defaultRSize;
+  const rDollars = trade.value.rSize || settingsStore.riskSettings.defaultRSize;
   return `${rDollars.toFixed(2)} ÷ ${riskPerShare.value.toFixed(2)} = ${
     calculatedShares.value
   } shares`;
@@ -448,7 +420,7 @@ const totalRisk = computed(() => {
 });
 
 const totalRiskR = computed(() => {
-  const rSize = trade.value.rSize || props.defaultRSize;
+  const rSize = trade.value.rSize || settingsStore.riskSettings.defaultRSize;
   return dollarsToR(totalRisk.value, rSize);
 });
 
@@ -489,7 +461,10 @@ const rMultipleTarget2 = computed(() => {
 });
 
 const dailyRiskPercentage = computed(() => {
-  return calculateRiskPercentage(totalRisk.value, props.maxDailyLoss);
+  return calculateRiskPercentage(
+    totalRisk.value,
+    settingsStore.riskSettings.maxDailyLoss
+  );
 });
 
 const dailyRiskWarningIcon = computed(() => {
@@ -498,8 +473,8 @@ const dailyRiskWarningIcon = computed(() => {
 
 const remainingDailyRiskAfterTrade = computed(() => {
   return calculateRemainingRisk(
-    props.maxDailyLoss,
-    props.dailyRiskUsed + totalRisk.value
+    settingsStore.riskSettings.maxDailyLoss,
+    tradesStore.totalOpenRisk + totalRisk.value
   );
 });
 
@@ -523,11 +498,11 @@ watch([calculatedShares], () => {
   }
 });
 
-// Watch for changes in defaultRSize prop and update rSize if it hasn't been modified by user
+// Watch for changes in defaultRSize from store and update rSize if it hasn't been modified by user
 const userModifiedRSize = ref(false);
 
 watch(
-  () => props.defaultRSize,
+  () => settingsStore.riskSettings.defaultRSize,
   (newVal) => {
     if (!userModifiedRSize.value) {
       trade.value.rSize = newVal;
@@ -545,23 +520,23 @@ watch(
   }
 );
 
-// Watch for changes in tax and margin rates from props
+// Watch for changes in tax and margin rates from store
 watch(
-  () => props.stateTaxRate,
+  () => settingsStore.riskSettings.stateTaxRate,
   (newVal) => {
     trade.value.stateTaxRate = newVal;
   }
 );
 
 watch(
-  () => props.federalTaxRate,
+  () => settingsStore.riskSettings.federalTaxRate,
   (newVal) => {
     trade.value.federalTaxRate = newVal;
   }
 );
 
 watch(
-  () => props.marginInterestRate,
+  () => settingsStore.riskSettings.marginInterestRate,
   (newVal) => {
     trade.value.marginInterestRate = newVal;
   }
@@ -616,10 +591,10 @@ const submitTrade = () => {
     target3: "",
     type: "long",
     notes: "",
-    stateTaxRate: props.stateTaxRate,
-    federalTaxRate: props.federalTaxRate,
-    marginInterestRate: props.marginInterestRate,
-    rSize: props.defaultRSize,
+    stateTaxRate: settingsStore.riskSettings.stateTaxRate,
+    federalTaxRate: settingsStore.riskSettings.federalTaxRate,
+    marginInterestRate: settingsStore.riskSettings.marginInterestRate,
+    rSize: settingsStore.riskSettings.defaultRSize,
   };
 };
 </script>
