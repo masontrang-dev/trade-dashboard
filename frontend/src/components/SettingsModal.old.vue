@@ -5,13 +5,7 @@
         <div class="modal-container" @click.stop>
           <div class="modal-header">
             <h2>Settings</h2>
-            <Button
-              variant="ghost"
-              size="icon"
-              @click="handleClose"
-              aria-label="Close"
-              class="close-btn"
-            >
+            <button class="close-btn" @click="handleClose" aria-label="Close">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 width="24"
@@ -26,7 +20,7 @@
                 <line x1="18" y1="6" x2="6" y2="18"></line>
                 <line x1="6" y1="6" x2="18" y2="18"></line>
               </svg>
-            </Button>
+            </button>
           </div>
 
           <div class="modal-body">
@@ -36,48 +30,40 @@
                 <div class="mode-option">
                   <label class="mode-label-text">Trading Mode</label>
                   <div class="mode-toggle">
-                    <Button
-                      :variant="
-                        localSettings.tradingMode === 'DAY'
-                          ? 'default'
-                          : 'outline'
-                      "
+                    <button
+                      :class="{ active: localSettings.tradingMode === 'DAY' }"
                       @click="handleTradingModeChange('DAY')"
-                      size="sm"
+                      class="mode-btn day-btn"
                     >
                       DAY
-                    </Button>
-                    <Button
-                      :variant="
-                        localSettings.tradingMode === 'SWING'
-                          ? 'default'
-                          : 'outline'
-                      "
+                    </button>
+                    <button
+                      :class="{ active: localSettings.tradingMode === 'SWING' }"
                       @click="handleTradingModeChange('SWING')"
-                      size="sm"
+                      class="mode-btn swing-btn"
                     >
                       SWING
-                    </Button>
+                    </button>
                   </div>
                 </div>
 
                 <div class="mode-option">
                   <label class="mode-label-text">Development Mode</label>
                   <div class="mode-toggle">
-                    <Button
-                      :variant="!localSettings.devMode ? 'default' : 'outline'"
+                    <button
+                      :class="{ active: !localSettings.devMode }"
                       @click="handleDevModeToggle(false)"
-                      size="sm"
+                      class="mode-btn prod-btn"
                     >
                       OFF
-                    </Button>
-                    <Button
-                      :variant="localSettings.devMode ? 'default' : 'outline'"
+                    </button>
+                    <button
+                      :class="{ active: localSettings.devMode }"
                       @click="handleDevModeToggle(true)"
-                      size="sm"
+                      class="mode-btn dev-btn"
                     >
                       ON
-                    </Button>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -91,7 +77,7 @@
                 <div class="form-grid">
                   <div class="form-group">
                     <label for="defaultRSize">Default R Size ($)</label>
-                    <Input
+                    <input
                       id="defaultRSize"
                       v-model.number="localSettings.defaultRSize"
                       type="number"
@@ -105,7 +91,7 @@
                   <div class="form-group">
                     <label for="maxDailyLoss">Max Daily Loss ($)</label>
                     <div class="input-with-badge">
-                      <Input
+                      <input
                         id="maxDailyLoss"
                         v-model.number="localSettings.maxDailyLoss"
                         type="number"
@@ -113,9 +99,9 @@
                         min="0"
                         required
                       />
-                      <Badge v-if="showRValues" variant="secondary">
+                      <span v-if="showRValues" class="badge">
                         {{ maxDailyLossR.toFixed(2) }}R
-                      </Badge>
+                      </span>
                     </div>
                     <small>Maximum loss per day</small>
                   </div>
@@ -123,7 +109,7 @@
                   <div class="form-group">
                     <label for="maxOpenRisk">Max Open Risk ($)</label>
                     <div class="input-with-badge">
-                      <Input
+                      <input
                         id="maxOpenRisk"
                         v-model.number="localSettings.maxOpenRisk"
                         type="number"
@@ -131,16 +117,16 @@
                         min="0"
                         required
                       />
-                      <Badge v-if="showRValues" variant="secondary">
+                      <span v-if="showRValues" class="badge">
                         {{ maxOpenRiskR.toFixed(2) }}R
-                      </Badge>
+                      </span>
                     </div>
                     <small>Total risk across open positions</small>
                   </div>
 
                   <div class="form-group">
                     <label for="maxOpenPositions">Max Open Positions</label>
-                    <Input
+                    <input
                       id="maxOpenPositions"
                       v-model.number="localSettings.maxOpenPositions"
                       type="number"
@@ -154,7 +140,7 @@
 
                   <div class="form-group">
                     <label for="stateTaxRate">State Tax Rate (%)</label>
-                    <Input
+                    <input
                       id="stateTaxRate"
                       v-model.number="localSettings.stateTaxRate"
                       type="number"
@@ -167,7 +153,7 @@
 
                   <div class="form-group">
                     <label for="federalTaxRate">Federal Tax Rate (%)</label>
-                    <Input
+                    <input
                       id="federalTaxRate"
                       v-model.number="localSettings.federalTaxRate"
                       type="number"
@@ -182,7 +168,7 @@
                     <label for="marginInterestRate"
                       >Margin Interest Rate (% APR)</label
                     >
-                    <Input
+                    <input
                       id="marginInterestRate"
                       v-model.number="localSettings.marginInterestRate"
                       type="number"
@@ -209,10 +195,12 @@
           </div>
 
           <div class="modal-footer">
-            <Button @click="handleClose" variant="outline"> Cancel </Button>
-            <Button @click="handleSave" variant="default">
+            <button @click="handleClose" class="btn btn-secondary">
+              Cancel
+            </button>
+            <button @click="handleSave" class="btn btn-primary">
               Save Changes
-            </Button>
+            </button>
           </div>
         </div>
       </div>
@@ -244,12 +232,12 @@
             </div>
           </div>
           <div class="confirmation-footer">
-            <Button @click="cancelModeChange" variant="outline">
+            <button @click="cancelModeChange" class="btn btn-secondary">
               Cancel
-            </Button>
-            <Button @click="confirmModeChange" variant="default">
+            </button>
+            <button @click="confirmModeChange" class="btn btn-primary">
               Confirm Change
-            </Button>
+            </button>
           </div>
         </div>
       </div>
@@ -259,9 +247,6 @@
 
 <script setup>
 import { ref, computed, watch, onMounted } from "vue";
-import Button from "./ui/Button.vue";
-import Input from "./ui/Input.vue";
-import Badge from "./ui/Badge.vue";
 import api from "../services/api";
 
 const props = defineProps({

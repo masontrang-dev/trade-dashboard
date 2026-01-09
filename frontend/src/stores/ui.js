@@ -1,12 +1,11 @@
 import { defineStore } from "pinia";
+import { toast } from "vue-sonner";
 
 export const useUIStore = defineStore("ui", {
   state: () => ({
     showRInDollars: true,
     expandedSections: [],
     activeModal: null,
-    toasts: [],
-    toastIdCounter: 0,
   }),
 
   getters: {
@@ -15,8 +14,6 @@ export const useUIStore = defineStore("ui", {
     isSectionExpanded: (state) => (sectionId) => {
       return state.expandedSections.includes(sectionId);
     },
-
-    activeToasts: (state) => state.toasts,
   },
 
   actions: {
@@ -58,51 +55,21 @@ export const useUIStore = defineStore("ui", {
       this.activeModal = null;
     },
 
-    addToast(message, type = "info", duration = 5000) {
-      const id = ++this.toastIdCounter;
-      const toast = {
-        id,
-        message,
-        type,
-        timestamp: Date.now(),
-      };
-
-      this.toasts.push(toast);
-
-      if (duration > 0) {
-        setTimeout(() => {
-          this.removeToast(id);
-        }, duration);
-      }
-
-      return id;
+    // Toast methods using Sonner
+    showSuccessToast(message, duration) {
+      return toast.success(message, { duration });
     },
 
-    removeToast(id) {
-      const index = this.toasts.findIndex((t) => t.id === id);
-      if (index !== -1) {
-        this.toasts.splice(index, 1);
-      }
+    showErrorToast(message, duration) {
+      return toast.error(message, { duration });
     },
 
-    clearAllToasts() {
-      this.toasts = [];
+    showWarningToast(message, duration) {
+      return toast.warning(message, { duration });
     },
 
-    showSuccessToast(message, duration = 5000) {
-      return this.addToast(message, "success", duration);
-    },
-
-    showErrorToast(message, duration = 7000) {
-      return this.addToast(message, "error", duration);
-    },
-
-    showWarningToast(message, duration = 6000) {
-      return this.addToast(message, "warning", duration);
-    },
-
-    showInfoToast(message, duration = 5000) {
-      return this.addToast(message, "info", duration);
+    showInfoToast(message, duration) {
+      return toast.info(message, { duration });
     },
   },
 

@@ -1,5 +1,12 @@
 <template>
   <div class="trade-history">
+    <Toast
+      :show="toast.show"
+      :message="toast.message"
+      :type="toast.type"
+      @close="toast.show = false"
+    />
+
     <!-- Delete Confirmation Modal -->
     <div
       v-if="showDeleteConfirmation"
@@ -20,31 +27,33 @@
           <p class="warning-text">This action cannot be undone.</p>
         </div>
         <div class="modal-actions">
-          <Button @click="cancelDelete" variant="outline">Cancel</Button>
-          <Button @click="executeDelete" variant="destructive"> Delete </Button>
+          <button @click="cancelDelete" class="modal-cancel-btn">Cancel</button>
+          <button @click="executeDelete" class="modal-delete-btn">
+            Delete
+          </button>
         </div>
       </div>
     </div>
     <div class="header-row">
       <h2>Trade History</h2>
       <div class="header-actions" v-if="tradesStore.closedTrades.length > 0">
-        <Button v-if="!editMode" @click="enterEditMode" variant="default">
+        <button v-if="!editMode" @click="enterEditMode" class="edit-mode-btn">
           Edit
-        </Button>
+        </button>
         <template v-else>
-          <Button @click="saveAllChanges" variant="default">
+          <button @click="saveAllChanges" class="save-all-btn">
             ✓ Save All
-          </Button>
-          <Button @click="cancelEditMode" variant="secondary">
+          </button>
+          <button @click="cancelEditMode" class="cancel-all-btn">
             ✕ Cancel
-          </Button>
-          <Button
+          </button>
+          <button
             v-if="selectedTrades.size > 0"
             @click="confirmDeleteSelected"
-            variant="destructive"
+            class="delete-selected-btn"
           >
             🗑 Delete Selected ({{ selectedTrades.size }})
-          </Button>
+          </button>
         </template>
       </div>
     </div>
@@ -55,7 +64,7 @@
 
     <div v-else>
       <!-- Statistics Summary -->
-      <div class="stats-summary grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+      <div class="stats-summary">
         <div class="stat-card">
           <h3>Total Trades</h3>
           <span class="stat-value">{{ totalTrades }}</span>
@@ -230,12 +239,9 @@
                 />
               </td>
               <td>
-                <Badge
-                  :variant="trade.type === 'long' ? 'default' : 'destructive'"
-                  class="text-xs"
-                >
+                <span class="trade-type" :class="trade.type">
                   {{ trade.type.toUpperCase() }}
-                </Badge>
+                </span>
               </td>
               <td>
                 <span v-if="!editMode">${{ trade.entryPrice.toFixed(2) }}</span>
@@ -301,15 +307,13 @@
                 }}{{ tradeRMultiple(trade).toFixed(2) }}R
               </td>
               <td>
-                <Badge
-                  :variant="
-                    trade.profitLoss > 0
-                      ? 'default'
-                      : trade.profitLoss < 0
-                      ? 'destructive'
-                      : 'secondary'
-                  "
-                  class="text-xs"
+                <span
+                  class="win-loss-badge"
+                  :class="{
+                    win: trade.profitLoss > 0,
+                    loss: trade.profitLoss < 0,
+                    breakeven: trade.profitLoss === 0,
+                  }"
                 >
                   {{
                     trade.profitLoss > 0
@@ -318,7 +322,7 @@
                       ? "LOSS"
                       : "BE"
                   }}
-                </Badge>
+                </span>
               </td>
               <td class="tax">${{ calculateTax(trade).toFixed(2) }}</td>
               <td class="margin-interest">
@@ -369,9 +373,7 @@
 
 <script setup>
 import { ref, computed, watch } from "vue";
-import Badge from "./ui/Badge.vue";
-import Button from "./ui/Button.vue";
-import Card from "./ui/Card.vue";
+import Toast from "./Toast.vue";
 import api from "../services/api";
 import { useTradesStore } from "../stores/trades";
 import { useUIStore } from "../stores/ui";
@@ -394,6 +396,20 @@ const editMode = ref(false);
 const editedTrades = ref({});
 const selectedTrades = ref(new Set());
 const showDeleteConfirmation = ref(false);
+
+const toast = ref({
+  show: false,
+  message: "",
+  type: "success",
+});
+
+const showToast = (message, type = "success") => {
+  toast.value = {
+    show: true,
+    message,
+    type,
+  };
+};
 
 // Statistics
 const totalTrades = computed(() => tradesStore.closedTrades.length);
@@ -613,12 +629,13 @@ const executeDelete = async () => {
     editMode.value = false;
     editedTrades.value = {};
     selectedTrades.value = new Set();
-    uiStore.showSuccessToast(
-      `Successfully deleted ${count} trade${count > 1 ? "s" : ""}`
+    showToast(
+      `Successfully deleted ${count} trade${count > 1 ? "s" : ""}`,
+      "success"
     );
   } catch (error) {
     console.error("Error deleting trades:", error);
-    uiStore.showErrorToast("Failed to delete trades");
+    showToast(`Error deleting trades: ${error.message}`, "error");
   }
 };
 
@@ -684,14 +701,10 @@ const saveAllChanges = async () => {
 
     editMode.value = false;
     editedTrades.value = {};
-    uiStore.showSuccessToast(
-      `Successfully updated ${updates.length} trade${
-        updates.length > 1 ? "s" : ""
-      }`
-    );
+    showToast(`Successfully updated ${updates.length} trade(s)`, "success");
   } catch (error) {
     console.error("Error updating trades:", error);
-    uiStore.showErrorToast("Failed to update trades");
+    showToast(`Error updating trades: ${error.message}`, "error");
   }
 };
 

@@ -32,14 +32,14 @@
             </div>
             <div class="brand-text">
               <h1>Trading Dashboard</h1>
-              <Badge variant="secondary" class="mt-1">{{
+              <span class="mode-badge">{{
                 tradingMode === "DAY" ? "Day Trading" : "Swing Trading"
-              }}</Badge>
+              }}</span>
             </div>
           </div>
         </div>
         <div class="header-right">
-          <Button @click="openSettings" variant="outline" size="default">
+          <button @click="openSettings" class="settings-btn">
             <svg
               width="18"
               height="18"
@@ -54,7 +54,7 @@
               ></path>
             </svg>
             Settings
-          </Button>
+          </button>
         </div>
       </div>
       <div class="risk-cards">
@@ -248,8 +248,6 @@ import TradeForm from "./TradeForm.vue";
 import ActiveTrades from "./ActiveTrades.vue";
 import TradeHistory from "./TradeHistory.vue";
 import SettingsModal from "./SettingsModal.vue";
-import Button from "./ui/Button.vue";
-import Badge from "./ui/Badge.vue";
 import { useTradesStore } from "../stores/trades";
 import { useSettingsStore } from "../stores/settings";
 import { useUIStore } from "../stores/ui";

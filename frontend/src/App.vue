@@ -1,10 +1,12 @@
 <script setup>
 import TradingDashboard from "./components/TradingDashboard.vue";
+import { Toaster } from "./components/ui/sonner";
 </script>
 
 <template>
   <div id="app">
     <TradingDashboard />
+    <Toaster />
   </div>
 </template>
 

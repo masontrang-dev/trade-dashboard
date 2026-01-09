@@ -1,5 +1,12 @@
 <template>
   <div class="active-trades">
+    <Toast
+      :show="toast.show"
+      :message="toast.message"
+      :type="toast.type"
+      @close="toast.show = false"
+    />
+
     <!-- Delete Confirmation Modal -->
     <div
       v-if="showDeleteConfirmation"
@@ -19,10 +26,12 @@
           <p class="warning-text">This action cannot be undone.</p>
         </div>
         <div class="modal-actions">
-          <Button @click="cancelDeleteConfirmation" variant="outline">
+          <button @click="cancelDeleteConfirmation" class="modal-cancel-btn">
             Cancel
-          </Button>
-          <Button @click="executeDelete" variant="destructive"> Delete </Button>
+          </button>
+          <button @click="executeDelete" class="modal-delete-btn">
+            Delete
+          </button>
         </div>
       </div>
     </div>
@@ -33,16 +42,16 @@
     </div>
 
     <div v-else class="trades-list">
-      <Card
+      <div
         v-for="trade in tradesStore.openTrades"
         :key="trade.id"
+        class="trade-card"
         :class="{
-          'border-green-500': currentPnL(trade) > 0,
-          'border-red-500': currentPnL(trade) < 0,
-          'border-orange-500': closingTradeId === trade.id,
-          'border-blue-500': editingTradeId === trade.id,
+          profitable: currentPnL(trade) > 0,
+          losing: currentPnL(trade) < 0,
+          closing: closingTradeId === trade.id,
+          editing: editingTradeId === trade.id,
         }"
-        class="mb-4 transition-all hover:shadow-md"
       >
         <div class="trade-header">
           <div class="ticker-info">
@@ -54,62 +63,53 @@
               class="inline-edit-input ticker-input"
               placeholder="Ticker"
             />
-            <Badge
-              :variant="trade.type === 'long' ? 'default' : 'destructive'"
-              >{{ trade.type ? trade.type.toUpperCase() : "" }}</Badge
-            >
-            <Badge variant="secondary" v-if="trade.strategy">{{
+            <span class="trade-type" :class="trade.type">{{
+              trade.type ? trade.type.toUpperCase() : ""
+            }}</span>
+            <span class="strategy-badge" v-if="trade.strategy">{{
               trade.strategy
-            }}</Badge>
-            <Badge variant="outline" class="text-xs">{{
-              formatDate(trade.entryTime)
-            }}</Badge>
+            }}</span>
+            <span class="entry-date">{{ formatDate(trade.entryTime) }}</span>
           </div>
           <div class="trade-actions">
-            <Button
+            <button
               @click="toggleDetails(trade.id)"
-              variant="outline"
-              size="sm"
+              class="details-btn"
               title="Toggle Details"
             >
               {{ expandedTradeId === trade.id ? "▼" : "▶" }}
-            </Button>
-            <Button
+            </button>
+            <button
               v-if="editingTradeId !== trade.id"
               @click="startEditTrade(trade)"
-              variant="default"
-              size="sm"
+              class="edit-btn"
             >
               Edit
-            </Button>
-            <Button v-else @click="cancelEdit" variant="secondary" size="sm">
+            </button>
+            <button v-else @click="cancelEdit" class="cancel-edit-btn">
               Cancel
-            </Button>
-            <Button
+            </button>
+            <button
               v-if="editingTradeId === trade.id"
               @click="saveTradeEdit"
-              variant="default"
-              size="sm"
+              class="save-edit-btn"
             >
               Save
-            </Button>
-            <Button
+            </button>
+            <button
               v-if="editingTradeId === trade.id"
               @click="confirmDeleteTrade(trade)"
-              variant="destructive"
-              size="sm"
+              class="delete-btn"
             >
               Delete
-            </Button>
-            <Button
+            </button>
+            <button
               @click="toggleCloseTrade(trade)"
-              :variant="
-                closingTradeId === trade.id ? 'secondary' : 'destructive'
-              "
-              size="sm"
+              class="close-btn"
+              :class="{ active: closingTradeId === trade.id }"
             >
               {{ closingTradeId === trade.id ? "Cancel" : "Close" }}
-            </Button>
+            </button>
           </div>
         </div>
 
@@ -468,20 +468,19 @@
                   </span>
                 </div>
                 <div class="detail-item">
-                  <Button
+                  <button
                     @click="confirmCloseTrade(trade)"
-                    variant="default"
-                    size="sm"
+                    class="confirm-close-btn"
                     :disabled="!closeForm.exitPrice || !closeForm.closeDate"
                   >
                     Confirm Close
-                  </Button>
+                  </button>
                 </div>
               </div>
             </div>
           </transition>
         </div>
-      </Card>
+      </div>
     </div>
   </div>
 </template>
@@ -489,12 +488,7 @@
 <script setup>
 import { ref, computed, watch } from "vue";
 import apiService from "../services/api";
-import Card from "./ui/Card.vue";
-import CardHeader from "./ui/CardHeader.vue";
-import CardTitle from "./ui/CardTitle.vue";
-import CardContent from "./ui/CardContent.vue";
-import Badge from "./ui/Badge.vue";
-import Button from "./ui/Button.vue";
+import Toast from "./Toast.vue";
 import { useTradesStore } from "../stores/trades";
 import { useUIStore } from "../stores/ui";
 import { useSettingsStore } from "../stores/settings";
@@ -522,6 +516,20 @@ const closeForm = ref({
 
 const showDeleteConfirmation = ref(false);
 const tradeToDelete = ref(null);
+
+const toast = ref({
+  show: false,
+  message: "",
+  type: "success",
+});
+
+const showToast = (message, type = "success") => {
+  toast.value = {
+    show: true,
+    message,
+    type,
+  };
+};
 
 const currentPnL = computed(() => (trade) => {
   if (!trade?.currentPrice) return 0;
@@ -669,10 +677,10 @@ const saveTradeEdit = async () => {
 
     emit("trade-updated", updatedTrade);
     cancelEdit();
-    uiStore.showSuccessToast("Trade updated successfully");
+    showToast("Trade updated successfully!", "success");
   } catch (error) {
     console.error("Error updating trade:", error);
-    uiStore.showErrorToast("Failed to update trade");
+    showToast(`Error updating trade: ${error.message}`, "error");
   }
 };
 
@@ -769,10 +777,10 @@ const confirmCloseTrade = async (trade) => {
     };
 
     emit("trade-closed");
-    uiStore.showSuccessToast("Trade closed successfully");
+    showToast("Trade closed successfully!", "success");
   } catch (error) {
     console.error("Error closing trade:", error);
-    uiStore.showErrorToast("Failed to close trade");
+    showToast(`Error closing trade: ${error.message}`, "error");
   }
 };
 
@@ -797,10 +805,10 @@ const executeDelete = async () => {
     await apiService.deleteTrade(trade.id);
     cancelEdit();
     emit("trade-closed"); // Reuse the same event to trigger refresh
-    uiStore.showSuccessToast("Trade deleted successfully");
+    showToast("Trade deleted successfully!", "success");
   } catch (error) {
     console.error("Error deleting trade:", error);
-    uiStore.showErrorToast("Failed to delete trade");
+    showToast(`Error deleting trade: ${error.message}`, "error");
   }
 };
 </script>
