@@ -190,21 +190,7 @@
     </header>
 
     <main class="dashboard-main">
-      <div class="left-panel">
-        <TradeForm
-          @trade-added="handleTradeAdded"
-          :show-r-values="showRValues"
-          :default-r-size="defaultRSize"
-          :state-tax-rate="stateTaxRate"
-          :federal-tax-rate="federalTaxRate"
-          :margin-interest-rate="marginInterestRate"
-          :max-daily-loss="maxDailyLoss"
-          :daily-risk-used="dailyRiskUsed"
-          :trading-mode="tradingMode"
-        />
-      </div>
-
-      <div class="right-panel">
+      <div class="main-panel">
         <ActiveTrades
           :trades="activeTrades"
           :show-r-values="showRValues"
@@ -244,7 +230,6 @@
 
 <script setup>
 import { ref, computed, onMounted } from "vue";
-import TradeForm from "./TradeForm.vue";
 import ActiveTrades from "./ActiveTrades.vue";
 import TradeHistory from "./TradeHistory.vue";
 import SettingsModal from "./SettingsModal.vue";
@@ -859,13 +844,9 @@ const handleSettingsSave = async (settings) => {
 .dashboard-main {
   max-width: 1600px;
   margin: 0 auto;
-  display: grid;
-  grid-template-columns: 1fr 2fr;
-  gap: 24px;
 }
 
-.left-panel,
-.right-panel {
+.main-panel {
   display: flex;
   flex-direction: column;
   gap: 24px;
