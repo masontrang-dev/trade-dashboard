@@ -3,6 +3,13 @@ const router = express.Router();
 const Trade = require("../models/Trade");
 const marketData = require("../services/marketData");
 const { getDb, switchDatabase, isDevMode } = require("../models/database");
+const { validateBody } = require("../middleware/validation");
+const {
+  tradeSchema,
+  closeTradeSchema,
+  tradeUpdateSchema,
+  modeSettingsSchema,
+} = require("../../shared/schemas");
 
 router.get("/", async (req, res) => {
   try {
@@ -151,55 +158,29 @@ router.get("/:id", async (req, res) => {
   }
 });
 
-router.post("/", async (req, res) => {
+router.post("/", validateBody(tradeSchema), async (req, res) => {
   try {
-    const {
-      symbol,
-      type,
-      quantity,
-      entryPrice,
-      stopLoss,
-      targetPrice1,
-      targetPrice2,
-      notes,
-    } = req.body;
-
-    if (!symbol || !type || !quantity || !entryPrice) {
-      return res.status(400).json({
-        error: "Missing required fields: symbol, type, quantity, entryPrice",
-      });
-    }
-
-    if (!["LONG", "SHORT"].includes(type)) {
-      return res.status(400).json({
-        error: "Type must be either LONG or SHORT",
-      });
-    }
-
-    const newTrade = await Trade.create({
-      symbol,
-      type,
-      quantity,
-      entryPrice,
-      stopLoss,
-      targetPrice1,
-      targetPrice2,
-      notes,
-    });
+    const newTrade = await Trade.create(req.validatedBody);
 
     // Fetch current price for the newly created trade
     try {
       const currentPrice = await marketData
-        .getStockPrice(symbol)
+        .getStockPrice(req.validatedBody.symbol)
         .catch((err) => {
-          console.error(`Error getting price for ${symbol}:`, err.message);
+          console.error(
+            `Error getting price for ${req.validatedBody.symbol}:`,
+            err.message
+          );
           return null;
         });
 
-      newTrade.currentPrice = currentPrice || entryPrice;
+      newTrade.currentPrice = currentPrice || req.validatedBody.entryPrice;
     } catch (error) {
-      console.error(`Error fetching current price for ${symbol}:`, error);
-      newTrade.currentPrice = entryPrice; // Fallback to entry price
+      console.error(
+        `Error fetching current price for ${req.validatedBody.symbol}:`,
+        error
+      );
+      newTrade.currentPrice = req.validatedBody.entryPrice; // Fallback to entry price
     }
 
     res.status(201).json(newTrade);
@@ -208,9 +189,9 @@ router.post("/", async (req, res) => {
   }
 });
 
-router.put("/:id", async (req, res) => {
+router.put("/:id", validateBody(tradeUpdateSchema), async (req, res) => {
   try {
-    const updatedTrade = await Trade.update(req.params.id, req.body);
+    const updatedTrade = await Trade.update(req.params.id, req.validatedBody);
     res.json(updatedTrade);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -218,29 +199,18 @@ router.put("/:id", async (req, res) => {
 });
 
 // Close a trade with exit price
-router.post("/:id/close", async (req, res) => {
+router.post("/:id/close", validateBody(closeTradeSchema), async (req, res) => {
   try {
-    const { exitPrice, taxAmount, marginInterest, closeDate } = req.body;
-
-    if (exitPrice === undefined || exitPrice === null) {
-      return res.status(400).json({ error: "Exit price is required" });
-    }
-
-    if (isNaN(exitPrice) || exitPrice <= 0) {
-      return res.status(400).json({ error: "Invalid exit price" });
-    }
+    const { exitPrice, taxAmount, marginInterest, closeDate } =
+      req.validatedBody;
 
     const additionalData = {
-      taxAmount: taxAmount ? parseFloat(taxAmount) : undefined,
-      marginInterest: marginInterest ? parseFloat(marginInterest) : undefined,
-      closeDate: closeDate || undefined,
+      taxAmount,
+      marginInterest,
+      closeDate,
     };
 
-    const result = await Trade.close(
-      req.params.id,
-      parseFloat(exitPrice),
-      additionalData
-    );
+    const result = await Trade.close(req.params.id, exitPrice, additionalData);
 
     if (result.changes === 0) {
       return res
@@ -280,51 +250,49 @@ router.delete("/:id", async (req, res) => {
 });
 
 // Switch trading mode (DAY/SWING)
-router.post("/switch-mode", async (req, res) => {
-  try {
-    const { mode, devMode } = req.body;
+router.post(
+  "/switch-mode",
+  validateBody(modeSettingsSchema),
+  async (req, res) => {
+    try {
+      const { tradingMode: mode, devMode } = req.validatedBody;
 
-    if (!mode || !["DAY", "SWING"].includes(mode)) {
-      return res
-        .status(400)
-        .json({ error: "Invalid mode. Must be DAY or SWING" });
-    }
+      const db = getDb();
 
-    const db = getDb();
+      // Update trading mode in app_settings
+      await new Promise((resolve, reject) => {
+        db.run(
+          "UPDATE app_settings SET tradingMode = ?, updatedAt = ? WHERE id = 1",
+          [mode, new Date().toISOString()],
+          (err) => {
+            if (err) reject(err);
+            else resolve();
+          }
+        );
+      });
 
-    // Update trading mode in app_settings
-    await new Promise((resolve, reject) => {
-      db.run(
-        "UPDATE app_settings SET tradingMode = ?, updatedAt = ? WHERE id = 1",
-        [mode, new Date().toISOString()],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
+      // Get all open trades to re-evaluate
+      const openTrades = await Trade.getOpenPositions();
+
+      console.log(
+        `Switched to ${mode} mode. ${openTrades.length} open trades to re-evaluate.`
       );
-    });
 
-    // Get all open trades to re-evaluate
-    const openTrades = await Trade.getOpenPositions();
-
-    console.log(
-      `Switched to ${mode} mode. ${openTrades.length} open trades to re-evaluate.`
-    );
-
-    res.json({
-      message: `Successfully switched to ${mode} mode`,
-      mode,
-      devMode: isDevMode(),
-      openTradesCount: openTrades.length,
-    });
-  } catch (error) {
-    console.error("Error switching trading mode:", error);
-    res.status(500).json({
-      error: "Failed to switch trading mode",
-      details: error.message,
-    });
+      res.json({
+        message: `Successfully switched to ${mode} mode`,
+        mode,
+        devMode: isDevMode(),
+        openTradesCount: openTrades.length,
+      });
+    } catch (error) {
+      console.error("Error switching trading mode:", error);
+      res.status(500).json({
+        error: "Failed to switch trading mode",
+        details: error.message,
+      });
+    }
   }
-});
+);
 
 // Switch dev mode
 router.post("/switch-dev-mode", async (req, res) => {
