@@ -227,7 +227,7 @@
       :max-daily-loss="maxDailyLoss"
       :max-open-risk="maxOpenRisk"
       :default-r-size="defaultRSize"
-      :max-positions="maxPositions"
+      :max-open-positions="maxOpenPositions"
       :state-tax-rate="stateTaxRate"
       :federal-tax-rate="federalTaxRate"
       :margin-interest-rate="marginInterestRate"
@@ -263,7 +263,7 @@ const tradeHistory = ref([]);
 const tradingMode = ref("SWING");
 const devMode = ref(false);
 const isSettingsOpen = ref(false);
-const maxPositions = ref(5);
+const maxOpenPositions = ref(5);
 const enableAlerts = ref(true);
 
 // Load closed trades from API
@@ -359,8 +359,8 @@ const loadRiskSettings = async () => {
       if (settings.defaultRSize !== undefined) {
         defaultRSize.value = settings.defaultRSize;
       }
-      if (settings.maxPositions !== undefined) {
-        maxPositions.value = settings.maxPositions;
+      if (settings.maxOpenPositions !== undefined) {
+        maxOpenPositions.value = settings.maxOpenPositions;
       }
       if (settings.stateTaxRate !== undefined) {
         stateTaxRate.value = settings.stateTaxRate;
@@ -571,11 +571,13 @@ const handleTradeAdded = async (trade) => {
       entryPrice: parseFloat(trade.entryPrice),
       stopLoss: parseFloat(trade.stopLoss),
       target1: trade.target1 ? parseFloat(trade.target1) : null,
+      target2: trade.target2 ? parseFloat(trade.target2) : null,
       notes: trade.notes,
       riskAmount: riskAmount,
       rSize: defaultRSize.value,
       entryTime: new Date().toISOString(),
       status: "OPEN",
+      currentPrice: savedTrade.currentPrice || parseFloat(trade.entryPrice),
     };
 
     // Add to the beginning of the array
@@ -673,7 +675,7 @@ const handleSettingsSave = async (settings) => {
     const settingsToSave = {
       maxDailyLoss: settings.maxDailyLoss,
       maxOpenRisk: settings.maxOpenRisk,
-      maxPositions: settings.maxPositions,
+      maxOpenPositions: settings.maxOpenPositions,
       defaultRSize: settings.defaultRSize,
       enableAlerts: settings.enableAlerts,
       stateTaxRate: settings.stateTaxRate,
@@ -693,8 +695,8 @@ const handleSettingsSave = async (settings) => {
     if (settings.defaultRSize !== undefined) {
       defaultRSize.value = settings.defaultRSize;
     }
-    if (settings.maxPositions !== undefined) {
-      maxPositions.value = settings.maxPositions;
+    if (settings.maxOpenPositions !== undefined) {
+      maxOpenPositions.value = settings.maxOpenPositions;
     }
     if (settings.stateTaxRate !== undefined) {
       stateTaxRate.value = settings.stateTaxRate;

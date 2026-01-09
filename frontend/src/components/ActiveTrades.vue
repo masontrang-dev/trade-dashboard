@@ -6,6 +6,35 @@
       :type="toast.type"
       @close="toast.show = false"
     />
+
+    <!-- Delete Confirmation Modal -->
+    <div
+      v-if="showDeleteConfirmation"
+      class="modal-overlay"
+      @click="cancelDeleteConfirmation"
+    >
+      <div class="confirmation-modal" @click.stop>
+        <div class="modal-header">
+          <h3>⚠️ Confirm Deletion</h3>
+        </div>
+        <div class="modal-body">
+          <p>
+            Are you sure you want to delete this trade for
+            <strong>{{ tradeToDelete?.ticker }}</strong
+            >?
+          </p>
+          <p class="warning-text">This action cannot be undone.</p>
+        </div>
+        <div class="modal-actions">
+          <button @click="cancelDeleteConfirmation" class="modal-cancel-btn">
+            Cancel
+          </button>
+          <button @click="executeDelete" class="modal-delete-btn">
+            Delete
+          </button>
+        </div>
+      </div>
+    </div>
     <h2>Active Trades ({{ trades.length }})</h2>
 
     <div v-if="trades.length === 0" class="no-trades">
@@ -66,6 +95,13 @@
               class="save-edit-btn"
             >
               Save
+            </button>
+            <button
+              v-if="editingTradeId === trade.id"
+              @click="confirmDeleteTrade(trade)"
+              class="delete-btn"
+            >
+              Delete
             </button>
             <button
               @click="toggleCloseTrade(trade)"
@@ -486,6 +522,9 @@ const closeForm = ref({
   closeDate: null,
 });
 
+const showDeleteConfirmation = ref(false);
+const tradeToDelete = ref(null);
+
 const toast = ref({
   show: false,
   message: "",
@@ -750,6 +789,34 @@ const confirmCloseTrade = async (trade) => {
   } catch (error) {
     console.error("Error closing trade:", error);
     showToast(`Error closing trade: ${error.message}`, "error");
+  }
+};
+
+const confirmDeleteTrade = (trade) => {
+  tradeToDelete.value = trade;
+  showDeleteConfirmation.value = true;
+};
+
+const cancelDeleteConfirmation = () => {
+  showDeleteConfirmation.value = false;
+  tradeToDelete.value = null;
+};
+
+const executeDelete = async () => {
+  if (!tradeToDelete.value) return;
+
+  const trade = tradeToDelete.value;
+  showDeleteConfirmation.value = false;
+  tradeToDelete.value = null;
+
+  try {
+    await apiService.deleteTrade(trade.id);
+    cancelEdit();
+    emit("trade-closed"); // Reuse the same event to trigger refresh
+    showToast("Trade deleted successfully!", "success");
+  } catch (error) {
+    console.error("Error deleting trade:", error);
+    showToast(`Error deleting trade: ${error.message}`, "error");
   }
 };
 </script>
@@ -1295,6 +1362,141 @@ const confirmCloseTrade = async (trade) => {
 
 .save-edit-btn:hover {
   background: #229954;
+}
+
+.delete-btn {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  background: #e74c3c;
+  color: white;
+}
+
+.delete-btn:hover {
+  background: #c0392b;
+}
+
+/* Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.confirmation-modal {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1),
+    0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  max-width: 450px;
+  width: 90%;
+  animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.modal-header {
+  padding: 24px 24px 16px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #1f2937;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.modal-body {
+  padding: 24px;
+}
+
+.modal-body p {
+  margin: 0 0 12px 0;
+  color: #4b5563;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.modal-body p:last-child {
+  margin-bottom: 0;
+}
+
+.warning-text {
+  color: #dc2626;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.modal-actions {
+  padding: 16px 24px 24px;
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.modal-cancel-btn,
+.modal-delete-btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.modal-cancel-btn {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.modal-cancel-btn:hover {
+  background: #e5e7eb;
+}
+
+.modal-delete-btn {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: white;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+}
+
+.modal-delete-btn:hover {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+  transform: translateY(-1px);
 }
 
 .trade-card.editing {

@@ -187,6 +187,21 @@ router.post("/", async (req, res) => {
       notes,
     });
 
+    // Fetch current price for the newly created trade
+    try {
+      const currentPrice = await marketData
+        .getStockPrice(symbol)
+        .catch((err) => {
+          console.error(`Error getting price for ${symbol}:`, err.message);
+          return null;
+        });
+
+      newTrade.currentPrice = currentPrice || entryPrice;
+    } catch (error) {
+      console.error(`Error fetching current price for ${symbol}:`, error);
+      newTrade.currentPrice = entryPrice; // Fallback to entry price
+    }
+
     res.status(201).json(newTrade);
   } catch (error) {
     res.status(500).json({ error: error.message });

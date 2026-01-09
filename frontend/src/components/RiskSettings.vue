@@ -62,10 +62,10 @@
       </div>
 
       <div class="form-group">
-        <label for="maxPositions">Max Open Positions</label>
+        <label for="maxOpenPositions">Max Open Positions</label>
         <input
-          id="maxPositions"
-          v-model.number="settings.maxPositions"
+          id="maxOpenPositions"
+          v-model.number="settings.maxOpenPositions"
           type="number"
           step="1"
           min="1"
@@ -173,7 +173,7 @@ const emit = defineEmits(["settings-updated"]);
 const settings = ref({
   maxDailyLoss: props.maxDailyLoss,
   maxOpenRisk: props.maxOpenRisk,
-  maxPositions: 5,
+  maxOpenPositions: 5,
   defaultRSize: props.defaultRSize,
   enableAlerts: true,
   stateTaxRate: 0,
@@ -208,7 +208,7 @@ const updateSettings = async () => {
     const settingsToSave = {
       maxDailyLoss: settings.value.maxDailyLoss,
       maxOpenRisk: settings.value.maxOpenRisk,
-      maxPositions: settings.value.maxPositions,
+      maxOpenPositions: settings.value.maxOpenPositions,
       defaultRSize: settings.value.defaultRSize,
       enableAlerts: settings.value.enableAlerts,
       stateTaxRate: settings.value.stateTaxRate,

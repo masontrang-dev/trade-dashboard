@@ -6,6 +6,34 @@
       :type="toast.type"
       @close="toast.show = false"
     />
+
+    <!-- Delete Confirmation Modal -->
+    <div
+      v-if="showDeleteConfirmation"
+      class="modal-overlay"
+      @click="cancelDelete"
+    >
+      <div class="confirmation-modal" @click.stop>
+        <div class="modal-header">
+          <h3>⚠️ Confirm Deletion</h3>
+        </div>
+        <div class="modal-body">
+          <p>
+            Are you sure you want to delete
+            <strong>{{ selectedTrades.size }}</strong> trade{{
+              selectedTrades.size > 1 ? "s" : ""
+            }}?
+          </p>
+          <p class="warning-text">This action cannot be undone.</p>
+        </div>
+        <div class="modal-actions">
+          <button @click="cancelDelete" class="modal-cancel-btn">Cancel</button>
+          <button @click="executeDelete" class="modal-delete-btn">
+            Delete
+          </button>
+        </div>
+      </div>
+    </div>
     <div class="header-row">
       <h2>Trade History</h2>
       <div class="header-actions" v-if="history.length > 0">
@@ -18,6 +46,13 @@
           </button>
           <button @click="cancelEditMode" class="cancel-all-btn">
             ✕ Cancel
+          </button>
+          <button
+            v-if="selectedTrades.size > 0"
+            @click="confirmDeleteSelected"
+            class="delete-selected-btn"
+          >
+            🗑 Delete Selected ({{ selectedTrades.size }})
           </button>
         </template>
       </div>
@@ -94,6 +129,32 @@
         <table>
           <thead>
             <tr>
+              <th v-if="editMode" class="checkbox-col">
+                <div
+                  class="custom-checkbox select-all"
+                  @click="toggleSelectAll"
+                  :class="{
+                    checked:
+                      selectedTrades.size === filteredHistory.length &&
+                      filteredHistory.length > 0,
+                  }"
+                  title="Select All"
+                >
+                  <svg
+                    v-if="
+                      selectedTrades.size === filteredHistory.length &&
+                      filteredHistory.length > 0
+                    "
+                    class="check-icon"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="3"
+                  >
+                    <path d="M6 12l4 4L18 8" />
+                  </svg>
+                </div>
+              </th>
               <th>Entry Date</th>
               <th>Exit Date</th>
               <th>Ticker</th>
@@ -122,6 +183,24 @@
               }"
               :title="trade.notes || ''"
             >
+              <td v-if="editMode" class="checkbox-col">
+                <div
+                  class="custom-checkbox delete-checkbox"
+                  @click="toggleTradeSelection(trade.id)"
+                  :class="{ checked: selectedTrades.has(trade.id) }"
+                >
+                  <svg
+                    v-if="selectedTrades.has(trade.id)"
+                    class="x-icon"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="3"
+                  >
+                    <path d="M6 6l12 12M18 6L6 18" />
+                  </svg>
+                </div>
+              </td>
               <td>
                 <span v-if="!editMode">{{ formatDate(trade.entryDate) }}</span>
                 <input
@@ -323,6 +402,8 @@ const filterType = ref("all");
 const filteredHistory = ref([]);
 const editMode = ref(false);
 const editedTrades = ref({});
+const selectedTrades = ref(new Set());
+const showDeleteConfirmation = ref(false);
 
 const toast = ref({
   show: false,
@@ -510,6 +591,60 @@ const enterEditMode = () => {
 const cancelEditMode = () => {
   editMode.value = false;
   editedTrades.value = {};
+  selectedTrades.value = new Set();
+};
+
+const toggleTradeSelection = (tradeId) => {
+  if (selectedTrades.value.has(tradeId)) {
+    selectedTrades.value.delete(tradeId);
+  } else {
+    selectedTrades.value.add(tradeId);
+  }
+  // Force reactivity update
+  selectedTrades.value = new Set(selectedTrades.value);
+};
+
+const toggleSelectAll = () => {
+  if (selectedTrades.value.size === filteredHistory.value.length) {
+    selectedTrades.value = new Set();
+  } else {
+    selectedTrades.value = new Set(filteredHistory.value.map((t) => t.id));
+  }
+};
+
+const confirmDeleteSelected = () => {
+  showDeleteConfirmation.value = true;
+};
+
+const cancelDelete = () => {
+  showDeleteConfirmation.value = false;
+};
+
+const executeDelete = async () => {
+  const count = selectedTrades.value.size;
+  showDeleteConfirmation.value = false;
+
+  try {
+    const deletePromises = Array.from(selectedTrades.value).map((tradeId) =>
+      api.deleteTrade(tradeId)
+    );
+
+    await Promise.all(deletePromises);
+
+    // Refresh the history
+    window.location.reload();
+
+    editMode.value = false;
+    editedTrades.value = {};
+    selectedTrades.value = new Set();
+    showToast(
+      `Successfully deleted ${count} trade${count > 1 ? "s" : ""}`,
+      "success"
+    );
+  } catch (error) {
+    console.error("Error deleting trades:", error);
+    showToast(`Error deleting trades: ${error.message}`, "error");
+  }
 };
 
 const saveAllChanges = async () => {
@@ -667,6 +802,201 @@ watch(
 .cancel-all-btn:hover {
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(149, 165, 166, 0.4);
+}
+
+.delete-selected-btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+  color: white;
+  box-shadow: 0 2px 8px rgba(231, 76, 60, 0.3);
+}
+
+.delete-selected-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(231, 76, 60, 0.4);
+}
+
+.checkbox-col {
+  width: 40px;
+  text-align: center;
+  padding: 8px 4px !important;
+}
+
+.custom-checkbox {
+  width: 22px;
+  height: 22px;
+  border: 2px solid #cbd5e1;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: white;
+}
+
+.custom-checkbox:hover {
+  border-color: #94a3b8;
+  background: #f8fafc;
+}
+
+.custom-checkbox.select-all {
+  border-color: #3b82f6;
+}
+
+.custom-checkbox.select-all:hover {
+  background: #eff6ff;
+  border-color: #2563eb;
+}
+
+.custom-checkbox.select-all.checked {
+  background: #3b82f6;
+  border-color: #3b82f6;
+}
+
+.custom-checkbox.delete-checkbox.checked {
+  background: #ef4444;
+  border-color: #ef4444;
+}
+
+.custom-checkbox.delete-checkbox:hover {
+  border-color: #f87171;
+}
+
+.custom-checkbox .check-icon,
+.custom-checkbox .x-icon {
+  width: 14px;
+  height: 14px;
+  color: white;
+}
+
+/* Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.confirmation-modal {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1),
+    0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  max-width: 450px;
+  width: 90%;
+  animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.modal-header {
+  padding: 24px 24px 16px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #1f2937;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.modal-body {
+  padding: 24px;
+}
+
+.modal-body p {
+  margin: 0 0 12px 0;
+  color: #4b5563;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.modal-body p:last-child {
+  margin-bottom: 0;
+}
+
+.warning-text {
+  color: #dc2626;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.modal-actions {
+  padding: 16px 24px 24px;
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.modal-cancel-btn,
+.modal-delete-btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.modal-cancel-btn {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.modal-cancel-btn:hover {
+  background: #e5e7eb;
+}
+
+.modal-delete-btn {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: white;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+}
+
+.modal-delete-btn:hover {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+  transform: translateY(-1px);
 }
 
 .no-history {

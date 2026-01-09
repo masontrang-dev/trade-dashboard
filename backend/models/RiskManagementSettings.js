@@ -41,8 +41,30 @@ class RiskManagementSettings {
       const setClauses = [];
       const values = [];
 
+      // Valid column names in the database
+      const validColumns = [
+        "maxPositionSize",
+        "maxDailyLoss",
+        "maxRiskPerTrade",
+        "stopLossPercentage",
+        "takeProfitPercentage",
+        "maxOpenPositions",
+        "enableAlerts",
+        "defaultRSize",
+        "maxOpenRisk",
+        "stateTaxRate",
+        "federalTaxRate",
+        "marginInterestRate",
+      ];
+
       // Build the SET clause with camelCase field names
       Object.entries(settings).forEach(([key, value]) => {
+        // Skip invalid column names
+        if (!validColumns.includes(key)) {
+          console.warn(`Skipping invalid column name: ${key}`);
+          return;
+        }
+
         // Convert boolean to 1/0 for SQLite
         const dbValue = typeof value === "boolean" ? (value ? 1 : 0) : value;
         console.log(`Setting ${key} with value:`, dbValue);
@@ -72,13 +94,15 @@ class RiskManagementSettings {
       console.log("With values:", values);
 
       db.run(updateSql, values, function (err) {
-        const changes = this.changes;
-        console.log("Update callback - changes:", changes, "error:", err);
-
         if (err) {
           console.error("Error in update query:", err);
+          console.error("SQL was:", updateSql);
+          console.error("Values were:", values);
           return reject(err);
         }
+
+        const changes = this.changes;
+        console.log("Update callback - changes:", changes);
 
         // If no rows were updated, try to insert
         if (changes === 0) {

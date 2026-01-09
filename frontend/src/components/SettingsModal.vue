@@ -125,10 +125,10 @@
                   </div>
 
                   <div class="form-group">
-                    <label for="maxPositions">Max Open Positions</label>
+                    <label for="maxOpenPositions">Max Open Positions</label>
                     <input
-                      id="maxPositions"
-                      v-model.number="localSettings.maxPositions"
+                      id="maxOpenPositions"
+                      v-model.number="localSettings.maxOpenPositions"
                       type="number"
                       step="1"
                       min="1"
@@ -274,7 +274,7 @@ const props = defineProps({
     type: Number,
     default: 2500,
   },
-  maxPositions: {
+  maxOpenPositions: {
     type: Number,
     default: 5,
   },
@@ -317,7 +317,7 @@ const localSettings = ref({
   maxDailyLoss: props.maxDailyLoss,
   maxOpenRisk: props.maxOpenRisk,
   defaultRSize: props.defaultRSize,
-  maxPositions: props.maxPositions,
+  maxOpenPositions: props.maxOpenPositions,
   stateTaxRate: props.stateTaxRate,
   federalTaxRate: props.federalTaxRate,
   marginInterestRate: props.marginInterestRate,
@@ -338,8 +338,8 @@ const loadSettingsFromAPI = async () => {
       if (settings.defaultRSize !== undefined) {
         localSettings.value.defaultRSize = settings.defaultRSize;
       }
-      if (settings.maxPositions !== undefined) {
-        localSettings.value.maxPositions = settings.maxPositions;
+      if (settings.maxOpenPositions !== undefined) {
+        localSettings.value.maxOpenPositions = settings.maxOpenPositions;
       }
       if (settings.stateTaxRate !== undefined) {
         localSettings.value.stateTaxRate = settings.stateTaxRate;
@@ -374,7 +374,7 @@ watch(
         maxDailyLoss: props.maxDailyLoss,
         maxOpenRisk: props.maxOpenRisk,
         defaultRSize: props.defaultRSize,
-        maxPositions: props.maxPositions,
+        maxOpenPositions: props.maxOpenPositions,
         stateTaxRate: props.stateTaxRate,
         federalTaxRate: props.federalTaxRate,
         marginInterestRate: props.marginInterestRate,
